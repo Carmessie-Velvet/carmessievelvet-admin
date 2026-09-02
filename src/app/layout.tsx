@@ -3,9 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/layout/AppSidebar";
-import { AppHeader } from "@/components/layout/AppHeader";
+import { AuthProvider } from "@/context/auth-context";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -29,16 +27,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col font-sans">
-        <TooltipProvider delay={200}>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-              <AppHeader />
-              <div className="flex-1 p-4 md:p-6">{children}</div>
-            </SidebarInset>
-          </SidebarProvider>
-          <Toaster richColors position="top-right" />
-        </TooltipProvider>
+        <AuthProvider>
+          <TooltipProvider delay={200}>
+            {children}
+            <Toaster richColors position="top-right" />
+          </TooltipProvider>
+        </AuthProvider>
       </body>
     </html>
   );

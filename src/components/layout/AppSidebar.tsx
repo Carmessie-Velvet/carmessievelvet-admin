@@ -3,7 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ShoppingBag } from "lucide-react";
+import {
+  LayoutDashboard,
+  Package,
+  Percent,
+  ShoppingBag,
+  Tag,
+  Ticket,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +27,10 @@ import {
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/productos", label: "Productos", icon: ShoppingBag },
+  { href: "/ordenes", label: "Órdenes", icon: Package },
+  { href: "/cupones", label: "Cupones", icon: Ticket },
+  { href: "/descuentos", label: "Descuentos", icon: Percent },
+  { href: "/tags", label: "Tags", icon: Tag },
 ];
 
 export function AppSidebar() {
