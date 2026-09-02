@@ -84,6 +84,17 @@ export async function apiFetch<T>(
       ? rawMessage.join(", ")
       : (rawMessage ?? `Error ${response.status}`);
     const retryAfter = body && !body.success ? body.retryAfter : undefined;
+
+    // A 401 means the stored token is gone/expired/invalid — clear it here,
+    // once, so every caller's "redirect to /login on 401" doesn't bounce
+    // straight back: without this, the login page's own "already
+    // authenticated, redirect to /" check (auth-context.tsx only looks at
+    // whether a session is stored, not whether its token is still valid)
+    // saw the stale session and sent the user right back, forever.
+    if (response.status === 401) {
+      authStore.clearSession();
+    }
+
     throw new ApiError(message, response.status, retryAfter);
   }
 
