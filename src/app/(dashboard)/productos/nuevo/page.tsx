@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import type { Category, Color, CreateProductPayload } from "@/types/product";
-import { categoryService } from "@/services/category-service";
-import { productService } from "@/services/product-service";
+import { Images, Info, Layers } from "lucide-react";
+import type { ApiCategory, ApiTag } from "@/types/catalog";
+import { catalogService } from "@/services/catalog-service";
+import { ApiError } from "@/lib/api-client";
 import { commonSizes } from "@/mocks/sizes";
 import {
   defaultProductFormValues,
@@ -41,15 +42,20 @@ import {
 } from "@/components/ui/form";
 import { ImageUploader } from "@/components/products/ImageUploader";
 import { VariantManager } from "@/components/products/VariantManager";
+import { TagPicker } from "@/components/products/TagPicker";
 
 export default function NewProductPage() {
   const router = useRouter();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [colors, setColors] = useState<Color[]>([]);
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
+  const [tags, setTags] = useState<ApiTag[]>([]);
 
   useEffect(() => {
-    categoryService.getCategories().then(setCategories);
-    categoryService.getColors().then(setColors);
+    catalogService.getCategories().then(setCategories).catch(() => {
+      toast.error("No se pudieron cargar las categorías.");
+    });
+    catalogService.getTags().then(setTags).catch(() => {
+      toast.error("No se pudieron cargar las tags.");
+    });
   }, []);
 
   const form = useForm<ProductFormValues>({
@@ -59,26 +65,31 @@ export default function NewProductPage() {
   });
 
   async function onSubmit(values: ProductFormValues) {
-    const payload: CreateProductPayload = {
-      title: values.title,
-      price: values.price,
-      description: values.description,
-      categoryId: values.categoryId,
-      images: values.images.map((file) => ({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-      })),
-      variants: values.variants.map(({ color, size, stock }) => ({
-        color,
-        size,
-        stock,
-      })),
-    };
+    try {
+      const created = await catalogService.createProduct({
+        name: values.name,
+        description: values.description,
+        price: values.price,
+        categoryId: values.categoryId,
+        sku: values.sku || undefined,
+        color: values.color || undefined,
+        tagIds: values.tagIds,
+        variants: values.variants,
+      });
 
-    const created = await productService.createProduct(payload);
-    toast.success(`“${created.title}” se creó como borrador.`);
-    router.push("/productos");
+      if (values.images.length > 0) {
+        await catalogService.uploadProductImages(created.sku, values.images);
+      }
+
+      toast.success(`"${created.name}" se creó correctamente.`);
+      router.push("/productos");
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : "No se pudo crear el producto."
+      );
+    }
   }
 
   return (
@@ -88,11 +99,9 @@ export default function NewProductPage() {
           Nuevo producto
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Se guarda como borrador. El envío queda preparado con un{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">
-            console.log
-          </code>{" "}
-          listo para conectar la API real.
+          Se crea directo en el catálogo real. El color es un solo valor por
+          producto (no por talla) — si el mismo diseño viene en otro color,
+          se crea como un producto aparte.
         </p>
       </div>
 
@@ -103,18 +112,25 @@ export default function NewProductPage() {
         >
           <Card>
             <CardHeader>
-              <CardTitle>Información general</CardTitle>
-              <CardDescription>
-                Título, precio, descripción y categoría del producto.
-              </CardDescription>
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <Info className="size-4" />
+                </span>
+                <div>
+                  <CardTitle>Información general</CardTitle>
+                  <CardDescription>
+                    Nombre, precio, descripción y categoría del producto.
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <FormField
                 control={form.control}
-                name="title"
+                name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Título</FormLabel>
+                    <FormLabel>Nombre</FormLabel>
                     <FormControl>
                       <Input placeholder="Ej. Vestido Noa Satinado en Vino" {...field} />
                     </FormControl>
@@ -188,6 +204,36 @@ export default function NewProductPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="color"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Color</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ej. Negro" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="sku"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>SKU (opcional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Se genera automático si lo dejas vacío" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <FormField
                 control={form.control}
                 name="description"
@@ -205,15 +251,35 @@ export default function NewProductPage() {
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="tagIds"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tags</FormLabel>
+                    <TagPicker tags={tags} value={field.value} onChange={field.onChange} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Imágenes</CardTitle>
-              <CardDescription>
-                La primera imagen se usa como portada del producto.
-              </CardDescription>
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <Images className="size-4" />
+                </span>
+                <div>
+                  <CardTitle>Imágenes</CardTitle>
+                  <CardDescription>
+                    La primera imagen se usa como portada del producto. Se
+                    suben a la API en cuanto guardas.
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <FormField
@@ -231,10 +297,17 @@ export default function NewProductPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Variantes</CardTitle>
-              <CardDescription>
-                Combina color, talle y stock disponible para cada variante.
-              </CardDescription>
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <Layers className="size-4" />
+                </span>
+                <div>
+                  <CardTitle>Stock por talla</CardTitle>
+                  <CardDescription>
+                    Cuánto stock hay disponible en cada talla.
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <FormField
@@ -245,7 +318,6 @@ export default function NewProductPage() {
                     <VariantManager
                       value={field.value}
                       onChange={field.onChange}
-                      colors={colors}
                       sizes={commonSizes}
                     />
                     <FormMessage />
