@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { ArrowLeft, Images, Info, Layers, Loader2, Trash2 } from "lucide-react";
@@ -18,6 +18,8 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -54,11 +56,16 @@ function valuesFromProduct(product: ApiProduct): ProductEditFormValues {
     sku: product.sku,
     color: product.color ?? "",
     active: product.active,
+    madeToOrder: product.madeToOrder,
     tagIds: product.tags.map((t) => t.id),
-    variants: commonSizes.map((size) => ({
-      size,
-      stock: product.variants.find((v) => v.size === size)?.stock ?? 0,
-    })),
+    variants: commonSizes.map((size) => {
+      const variant = product.variants.find((v) => v.size === size);
+      return {
+        size,
+        stock: variant?.stock ?? 0,
+        soldOut: variant?.soldOut ?? false,
+      };
+    }),
   };
 }
 
@@ -170,6 +177,8 @@ function ProductEditForm({
     mode: "onBlur",
   });
 
+  const madeToOrder = useWatch({ control: form.control, name: "madeToOrder" });
+
   async function handleDelete() {
     if (
       !window.confirm(
@@ -202,6 +211,7 @@ function ProductEditForm({
         sku: values.sku || undefined,
         color: values.color,
         active: values.active,
+        madeToOrder: values.madeToOrder,
         tagIds: values.tagIds,
         variants: values.variants,
       });
@@ -476,12 +486,34 @@ function ProductEditForm({
                 <div>
                   <CardTitle>Stock por talla</CardTitle>
                   <CardDescription>
-                    Cuánto stock hay disponible en cada talla.
+                    Cuánto stock hay disponible en cada talla, o márcalo como
+                    sobre pedido para venderlo sin inventario.
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-4">
+              <FormField
+                control={form.control}
+                name="madeToOrder"
+                render={({ field }) => (
+                  <FormItem>
+                    <Label className="text-sm font-normal">
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                      Vender sobre pedido (sin inventario)
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      El stock deja de importar: se puede comprar cualquier
+                      cantidad de veces hasta que marques una talla como
+                      agotada.
+                    </p>
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="variants"
@@ -491,6 +523,7 @@ function ProductEditForm({
                       value={field.value}
                       onChange={field.onChange}
                       sizes={commonSizes}
+                      madeToOrder={madeToOrder}
                     />
                     <FormMessage />
                   </FormItem>

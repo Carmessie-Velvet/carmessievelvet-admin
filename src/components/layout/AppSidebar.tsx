@@ -10,6 +10,7 @@ import {
   ShoppingBag,
   Tag,
   Ticket,
+  Truck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -31,6 +32,7 @@ const navItems = [
   { href: "/cupones", label: "Cupones", icon: Ticket },
   { href: "/descuentos", label: "Descuentos", icon: Percent },
   { href: "/tags", label: "Tags", icon: Tag },
+  { href: "/metodos-envio", label: "Métodos de envío", icon: Truck },
 ];
 
 export function AppSidebar() {

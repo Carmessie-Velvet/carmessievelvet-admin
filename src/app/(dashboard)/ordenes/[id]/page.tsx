@@ -241,6 +241,10 @@ export default function OrderDetailPage() {
             {order.shippingAddress.postalCode}
             {order.shippingAddress.country ? `, ${order.shippingAddress.country}` : ""}
           </p>
+          <p className="text-muted-foreground sm:col-span-2">
+            Envío: <span className="font-medium text-foreground">{order.shippingMethod}</span>
+            {order.shippingMethodDescription ? ` — ${order.shippingMethodDescription}` : ""}
+          </p>
           {order.notes && (
             <p className="mt-2 text-muted-foreground sm:col-span-2">Notas: {order.notes}</p>
           )}
@@ -291,6 +295,11 @@ export default function OrderDetailPage() {
                     </TableCell>
                     <TableCell className="font-medium">
                       {item.productName}
+                      {item.madeToOrder && (
+                        <Badge variant="secondary" className="ml-2 align-middle">
+                          Sobre pedido
+                        </Badge>
+                      )}
                       <div className="text-xs font-normal text-muted-foreground">
                         {item.productSku}
                       </div>
