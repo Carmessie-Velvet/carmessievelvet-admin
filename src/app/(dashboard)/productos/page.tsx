@@ -21,6 +21,10 @@ import {
 import type { ApiProduct } from "@/types/catalog";
 import { cn } from "@/lib/utils";
 
+function isFullySoldOut(product: ApiProduct): boolean {
+  return product.variants.length > 0 && product.variants.every((v) => v.soldOut);
+}
+
 function matchesQuery(product: ApiProduct, query: string): boolean {
   const haystack = [product.name, product.sku, product.category.name, product.color]
     .filter(Boolean)
@@ -187,7 +191,11 @@ export default function ProductsPage() {
                   </TableCell>
                   <TableCell>{formatCurrency(product.finalPrice)}</TableCell>
                   <TableCell>
-                    {product.totalStock === 0 ? (
+                    {isFullySoldOut(product) ? (
+                      <Badge variant="destructive">Agotado</Badge>
+                    ) : product.madeToOrder ? (
+                      <Badge variant="secondary">Sobre pedido</Badge>
+                    ) : product.totalStock === 0 ? (
                       <Badge variant="destructive">Agotado</Badge>
                     ) : (
                       product.totalStock

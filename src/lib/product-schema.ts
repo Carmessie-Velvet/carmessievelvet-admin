@@ -4,6 +4,7 @@ import { commonSizes } from "@/mocks/sizes";
 export const productVariantSchema = z.object({
   size: z.string().min(1),
   stock: z.number().min(0, "El stock no puede ser negativo"),
+  soldOut: z.boolean(),
 });
 
 const productFieldsSchema = z.object({
@@ -25,6 +26,12 @@ const productFieldsSchema = z.object({
       message: "Solo letras, números y guiones (3-50 caracteres)",
     }),
   color: z.string().trim().max(50, "Máximo 50 caracteres"),
+  /**
+   * Sobre pedido: no se rastrea inventario, se vende indefinidamente hasta
+   * marcar una talla como agotada. Se manda siempre explícito a la API para
+   * no depender de la inferencia por `stock` omitido.
+   */
+  madeToOrder: z.boolean(),
   tagIds: z.array(z.string()),
   variants: z
     .array(productVariantSchema)
@@ -44,9 +51,10 @@ export const defaultProductFormValues: ProductFormValues = {
   categoryId: "",
   sku: "",
   color: "",
+  madeToOrder: false,
   tagIds: [],
   images: [],
-  variants: commonSizes.map((size) => ({ size, stock: 0 })),
+  variants: commonSizes.map((size) => ({ size, stock: 0, soldOut: false })),
 };
 
 /**

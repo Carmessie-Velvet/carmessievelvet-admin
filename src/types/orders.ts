@@ -26,6 +26,8 @@ export interface OrderItem {
   productImage?: string;
   size: string;
   quantity: number;
+  /** El producto era sobre pedido al momento de la compra. */
+  madeToOrder: boolean;
   unitPrice: number;
   discountPercentage: number;
   unitFinalPrice: number;
@@ -43,6 +45,10 @@ export interface ApiOrder {
   subtotal: number;
   discountTotal: number;
   shippingTotal: number;
+  /** Código del método de envío elegido (catálogo en `/metodos-envio`). */
+  shippingMethod: string;
+  /** Snapshot de la descripción del método al momento de la compra. */
+  shippingMethodDescription?: string;
   total: number;
   couponCode?: string;
   items: OrderItem[];

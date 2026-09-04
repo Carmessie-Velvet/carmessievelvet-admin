@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { Images, Info, Layers } from "lucide-react";
@@ -18,6 +18,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -64,6 +66,8 @@ export default function NewProductPage() {
     mode: "onBlur",
   });
 
+  const madeToOrder = useWatch({ control: form.control, name: "madeToOrder" });
+
   async function onSubmit(values: ProductFormValues) {
     try {
       const created = await catalogService.createProduct({
@@ -73,6 +77,7 @@ export default function NewProductPage() {
         categoryId: values.categoryId,
         sku: values.sku || undefined,
         color: values.color || undefined,
+        madeToOrder: values.madeToOrder,
         tagIds: values.tagIds,
         variants: values.variants,
       });
@@ -304,12 +309,34 @@ export default function NewProductPage() {
                 <div>
                   <CardTitle>Stock por talla</CardTitle>
                   <CardDescription>
-                    Cuánto stock hay disponible en cada talla.
+                    Cuánto stock hay disponible en cada talla, o márcalo como
+                    sobre pedido para venderlo sin inventario.
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-4">
+              <FormField
+                control={form.control}
+                name="madeToOrder"
+                render={({ field }) => (
+                  <FormItem>
+                    <Label className="text-sm font-normal">
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                      Vender sobre pedido (sin inventario)
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      El stock deja de importar: se puede comprar cualquier
+                      cantidad de veces hasta que marques una talla como
+                      agotada.
+                    </p>
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="variants"
@@ -319,6 +346,7 @@ export default function NewProductPage() {
                       value={field.value}
                       onChange={field.onChange}
                       sizes={commonSizes}
+                      madeToOrder={madeToOrder}
                     />
                     <FormMessage />
                   </FormItem>
