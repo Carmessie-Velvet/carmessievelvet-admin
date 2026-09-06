@@ -7,15 +7,34 @@ export type OrderStatus =
   | "CANCELLED"
   | "REFUNDED";
 
+/**
+ * Dirección estructurada (reemplazó `line1`/`line2` cuando se agregó la
+ * generación automática de guías Enviatodo/Estafeta, que necesita calle,
+ * número y colonia por separado). `state` lo calcula la API a partir de
+ * `stateCode` — nunca se manda, solo se lee.
+ */
 export interface ShippingAddress {
   fullName: string;
-  phone?: string;
-  line1: string;
-  line2?: string;
+  phone: string;
+  street: string;
+  extNumber: string;
+  intNumber?: string;
+  suburb: string;
   city: string;
-  state: string;
+  state?: string;
+  stateCode: string;
   postalCode: string;
   country?: string;
+  reference?: string;
+}
+
+/** `GET/POST /orders/:id/shipment` — estado público de una guía Enviatodo. */
+export interface ApiOrderShipment {
+  carrier: string;
+  trackingId?: string;
+  carrierStatus?: string;
+  carrierStatusAt?: string;
+  createdAt: string;
 }
 
 export interface OrderItem {
@@ -56,6 +75,11 @@ export interface ApiOrder {
   cancelledAt?: string;
   cancellationReason?: string;
   trackingNumber?: string;
+  /**
+   * Guía automática de Enviatodo/Estafeta, si ya se generó una — `undefined`
+   * para órdenes `STANDARD` (siempre manuales) o `EXPRESS` sin guía todavía.
+   */
+  shipment?: ApiOrderShipment;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -85,6 +109,19 @@ export const CANCELLABLE_STATUSES: OrderStatus[] = [
   "SHIPPED",
   "DELIVERED",
 ];
+
+/**
+ * Métodos de envío para los que el backend genera y da seguimiento a una
+ * guía Enviatodo/Estafeta automáticamente (`SHIPPING_AUTOMATED_METHOD_CODES`,
+ * default solo `EXPRESS`) — mirrored aquí únicamente para decidir qué
+ * controles manuales mostrar en el detalle de la orden; la autoridad real
+ * sigue siendo el rechazo del backend en `POST /orders/:id/shipment`.
+ */
+const AUTOMATED_SHIPPING_METHODS = ["EXPRESS"];
+
+export function isAutomatedShipping(method: string): boolean {
+  return AUTOMATED_SHIPPING_METHODS.includes(method.toUpperCase());
+}
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: "Pendiente",

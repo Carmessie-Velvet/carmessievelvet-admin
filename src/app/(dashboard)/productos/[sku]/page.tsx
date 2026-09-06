@@ -11,6 +11,7 @@ import type { ApiCategory, ApiProduct, ApiTag } from "@/types/catalog";
 import { catalogService } from "@/services/catalog-service";
 import { ApiError } from "@/lib/api-client";
 import { commonSizes } from "@/mocks/sizes";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   productEditFormSchema,
   type ProductEditFormValues,
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { SectionIcon } from "@/components/ui/section-icon";
 import {
   Card,
   CardContent,
@@ -169,6 +171,7 @@ function ProductEditForm({
   onSkuRenamed: (sku: string) => void;
 }) {
   const router = useRouter();
+  const { confirm } = useConfirmDialog();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const form = useForm<ProductEditFormValues>({
@@ -180,13 +183,13 @@ function ProductEditForm({
   const madeToOrder = useWatch({ control: form.control, name: "madeToOrder" });
 
   async function handleDelete() {
-    if (
-      !window.confirm(
-        `¿Eliminar "${product.name}"? Esta acción no se puede deshacer desde el admin.`
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: `¿Eliminar "${product.name}"?`,
+      description: "Esta acción no se puede deshacer desde el admin.",
+      confirmLabel: "Eliminar",
+      destructive: true,
+    });
+    if (!ok) return;
 
     setIsDeleting(true);
     try {
@@ -270,9 +273,7 @@ function ProductEditForm({
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <Info className="size-4" />
-                </span>
+                <SectionIcon icon={Info} index={0} />
                 <div>
                   <CardTitle>Información general</CardTitle>
                   <CardDescription>
@@ -456,9 +457,7 @@ function ProductEditForm({
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <Images className="size-4" />
-                </span>
+                <SectionIcon icon={Images} index={1} />
                 <div>
                   <CardTitle>Imágenes</CardTitle>
                   <CardDescription>
@@ -480,9 +479,7 @@ function ProductEditForm({
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <Layers className="size-4" />
-                </span>
+                <SectionIcon icon={Layers} index={2} />
                 <div>
                   <CardTitle>Stock por talla</CardTitle>
                   <CardDescription>

@@ -9,9 +9,11 @@ import { z } from "zod";
 import { Loader2, Pencil, Ticket, Trash2, X } from "lucide-react";
 import { couponService } from "@/services/coupon-service";
 import { ApiError } from "@/lib/api-client";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { SectionIcon } from "@/components/ui/section-icon";
 import {
   Card,
   CardContent,
@@ -73,6 +75,7 @@ const emptyValues: CouponFormValues = {
 
 export default function CouponsPage() {
   const router = useRouter();
+  const { confirm } = useConfirmDialog();
   const [coupons, setCoupons] = useState<ApiCoupon[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -163,7 +166,12 @@ export default function CouponsPage() {
   }
 
   async function handleDelete(coupon: ApiCoupon) {
-    if (!window.confirm(`¿Eliminar el cupón "${coupon.code}"?`)) return;
+    const ok = await confirm({
+      title: `¿Eliminar el cupón "${coupon.code}"?`,
+      confirmLabel: "Eliminar",
+      destructive: true,
+    });
+    if (!ok) return;
 
     setBusyId(coupon.id);
     try {
@@ -196,9 +204,7 @@ export default function CouponsPage() {
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-                <Ticket className="size-4" />
-              </span>
+              <SectionIcon icon={Ticket} index={0} />
               <div>
                 <CardTitle>{editingId ? "Editar cupón" : "Nuevo cupón"}</CardTitle>
                 <CardDescription>

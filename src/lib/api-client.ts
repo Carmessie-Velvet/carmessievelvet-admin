@@ -100,3 +100,50 @@ export async function apiFetch<T>(
 
   return body.data;
 }
+
+/**
+ * Same envelope-unwrapping/401-handling as `apiFetch`, but for an endpoint
+ * that returns a raw binary body (the PDF shipping label) instead of the
+ * `{ success, data }` JSON envelope — a normal `.json()` parse would fail
+ * on a successful response here.
+ */
+export async function apiFetchBlob(
+  path: string,
+  { auth = true }: { auth?: boolean } = {}
+): Promise<Blob> {
+  const requestHeaders: Record<string, string> = {};
+  if (auth) {
+    const token = authStore.getAccessToken();
+    if (token) requestHeaders.Authorization = `Bearer ${token}`;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      headers: requestHeaders,
+    });
+  } catch {
+    throw new ApiError(
+      `No se pudo conectar con la API en ${API_BASE_URL}. ¿Está corriendo?`,
+      0
+    );
+  }
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as
+      | ApiErrorEnvelope
+      | null;
+    const rawMessage = body?.message;
+    const message = Array.isArray(rawMessage)
+      ? rawMessage.join(", ")
+      : (rawMessage ?? `Error ${response.status}`);
+
+    if (response.status === 401) {
+      authStore.clearSession();
+    }
+
+    throw new ApiError(message, response.status, body?.retryAfter);
+  }
+
+  return response.blob();
+}

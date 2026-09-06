@@ -6,8 +6,10 @@ import { toast } from "sonner";
 import { Check, Loader2, PlusCircle, Tag as TagIcon, Trash2, X } from "lucide-react";
 import { catalogService } from "@/services/catalog-service";
 import { ApiError } from "@/lib/api-client";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SectionIcon } from "@/components/ui/section-icon";
 import {
   Card,
   CardContent,
@@ -19,6 +21,7 @@ import type { ApiTag } from "@/types/catalog";
 
 export default function TagsPage() {
   const router = useRouter();
+  const { confirm } = useConfirmDialog();
   const [tags, setTags] = useState<ApiTag[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -87,7 +90,12 @@ export default function TagsPage() {
   }
 
   async function handleDelete(tag: ApiTag) {
-    if (!window.confirm(`¿Eliminar la tag "${tag.name}"?`)) return;
+    const ok = await confirm({
+      title: `¿Eliminar la tag "${tag.name}"?`,
+      confirmLabel: "Eliminar",
+      destructive: true,
+    });
+    if (!ok) return;
 
     setBusyId(tag.id);
     try {
@@ -117,9 +125,7 @@ export default function TagsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <TagIcon className="size-4" />
-            </span>
+            <SectionIcon icon={TagIcon} index={0} />
             <div>
               <CardTitle>Nueva tag</CardTitle>
               <CardDescription>Ej. encaje, satín, temporada-verano.</CardDescription>

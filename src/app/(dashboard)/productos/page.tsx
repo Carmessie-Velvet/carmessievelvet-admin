@@ -3,13 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, PackageSearch, Pencil, PlusCircle, Search } from "lucide-react";
+import { AlertTriangle, Layers, Loader2, PackageSearch, Pencil, PlusCircle, Search, ShoppingBag, Tags } from "lucide-react";
 import { catalogService } from "@/services/catalog-service";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
+import { useCatalogStats } from "@/hooks/use-catalog-stats";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { StatCard } from "@/components/dashboard/StatCard";
 import {
   Table,
   TableBody,
@@ -35,6 +38,7 @@ function matchesQuery(product: ApiProduct, query: string): boolean {
 
 export default function ProductsPage() {
   const router = useRouter();
+  const { catalog } = useCatalogStats(router);
   const [products, setProducts] = useState<ApiProduct[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -91,6 +95,18 @@ export default function ProductsPage() {
         </Link>
       </div>
 
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard icon={ShoppingBag} label="Productos" value={catalog?.totalProducts ?? null} tintIndex={0} />
+        <StatCard icon={Layers} label="Activos" value={catalog?.activeProducts ?? null} tintIndex={1} />
+        <StatCard
+          icon={AlertTriangle}
+          label="Sin stock"
+          value={catalog?.outOfStock ?? null}
+          tone={catalog && catalog.outOfStock > 0 ? "warning" : "default"}
+        />
+        <StatCard icon={Tags} label="Categorías" value={catalog?.categories ?? null} tintIndex={2} />
+      </div>
+
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {error}
@@ -143,7 +159,7 @@ export default function ProductsPage() {
       )}
 
       {filtered && filtered.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-border">
+        <Card className="overflow-hidden py-0">
           <Table>
             <TableHeader>
               <TableRow>
@@ -219,7 +235,7 @@ export default function ProductsPage() {
               ))}
             </TableBody>
           </Table>
-        </div>
+        </Card>
       )}
     </div>
   );
