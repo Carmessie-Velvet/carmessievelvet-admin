@@ -7,8 +7,10 @@ import { Check, Loader2, PlusCircle, Truck, Trash2, X } from "lucide-react";
 import { shippingMethodService } from "@/services/shipping-method-service";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SectionIcon } from "@/components/ui/section-icon";
 import {
   Card,
   CardContent,
@@ -28,6 +30,7 @@ function pesosToMinor(pesos: string): number | null {
 
 export default function ShippingMethodsPage() {
   const router = useRouter();
+  const { confirm } = useConfirmDialog();
   const [methods, setMethods] = useState<ApiShippingMethod[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,7 +125,12 @@ export default function ShippingMethodsPage() {
   }
 
   async function handleDelete(method: ApiShippingMethod) {
-    if (!window.confirm(`¿Eliminar el método de envío "${method.code}"?`)) return;
+    const ok = await confirm({
+      title: `¿Eliminar el método de envío "${method.code}"?`,
+      confirmLabel: "Eliminar",
+      destructive: true,
+    });
+    if (!ok) return;
 
     setBusyId(method.id);
     try {
@@ -154,9 +162,7 @@ export default function ShippingMethodsPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-              <Truck className="size-4" />
-            </span>
+            <SectionIcon icon={Truck} index={0} />
             <div>
               <CardTitle>Nuevo método de envío</CardTitle>
               <CardDescription>

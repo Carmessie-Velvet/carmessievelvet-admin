@@ -51,7 +51,10 @@ export const defaultProductFormValues: ProductFormValues = {
   categoryId: "",
   sku: "",
   color: "",
-  madeToOrder: false,
+  // La mayoría de las piezas son sobre pedido — arranca marcado para no
+  // obligar a tildarlo en cada producto nuevo; el admin lo desmarca cuando
+  // sí hay inventario real que rastrear.
+  madeToOrder: true,
   tagIds: [],
   images: [],
   variants: commonSizes.map((size) => ({ size, stock: 0, soldOut: false })),

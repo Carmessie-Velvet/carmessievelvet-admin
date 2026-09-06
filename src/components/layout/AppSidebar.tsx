@@ -11,6 +11,7 @@ import {
   Tag,
   Ticket,
   Truck,
+  Warehouse,
 } from "lucide-react";
 import {
   Sidebar,
@@ -24,6 +25,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -33,6 +35,7 @@ const navItems = [
   { href: "/descuentos", label: "Descuentos", icon: Percent },
   { href: "/tags", label: "Tags", icon: Tag },
   { href: "/metodos-envio", label: "Métodos de envío", icon: Truck },
+  { href: "/envios-automatizados", label: "Envíos automatizados", icon: Warehouse },
 ];
 
 export function AppSidebar() {
@@ -46,7 +49,7 @@ export function AppSidebar() {
             CV
           </span>
           <Image
-            src="/brand/carmessie-mark-white.png"
+            src="/brand/carmessie-mark-ink.png"
             alt="Carmessie Velvet"
             width={186}
             height={32}
@@ -71,6 +74,14 @@ export function AppSidebar() {
                       isActive={isActive}
                       tooltip={item.label}
                       render={<Link href={item.href} />}
+                      className={cn(
+                        // Pastilla sólida en el color de marca para el ítem
+                        // activo — igual que la referencia (naranja ahí,
+                        // primary acá). Se pinta a mano con !important en
+                        // vez de reusar --sidebar-accent (ese token queda
+                        // libre para el hover suave de los ítems inactivos).
+                        isActive && "!bg-primary !text-primary-foreground shadow-sm"
+                      )}
                     >
                       <item.icon />
                       <span>{item.label}</span>
@@ -84,7 +95,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="px-2 py-1.5 text-xs text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">
+        <div className="border-t border-sidebar-border px-2 py-2.5 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
           Panel interno · v0.1
         </div>
       </SidebarFooter>

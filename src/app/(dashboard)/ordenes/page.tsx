@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, PackageSearch, Search } from "lucide-react";
+import { Ban, Clock, Loader2, Package, PackageSearch, Search } from "lucide-react";
 import { orderService } from "@/services/order-service";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { StatCard } from "@/components/dashboard/StatCard";
 import {
   Select,
   SelectContent,
@@ -86,6 +88,16 @@ export default function OrdersPage() {
     });
   }, [orders, query, statusFilter]);
 
+  const stats = useMemo(() => {
+    if (!orders) return null;
+    return {
+      total: orders.length,
+      pending: orders.filter((o) => o.status === "PENDING").length,
+      paid: orders.filter((o) => o.status === "PAID").length,
+      cancelled: orders.filter((o) => o.status === "CANCELLED" || o.status === "REFUNDED").length,
+    };
+  }, [orders]);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -97,6 +109,18 @@ export default function OrdersPage() {
               ? "No se pudieron cargar las órdenes."
               : "Cargando órdenes desde la API..."}
         </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard icon={Package} label="Total" value={stats?.total ?? null} tintIndex={0} />
+        <StatCard icon={Clock} label="Pendientes" value={stats?.pending ?? null} tintIndex={1} />
+        <StatCard icon={Package} label="Pagadas" value={stats?.paid ?? null} tintIndex={2} />
+        <StatCard
+          icon={Ban}
+          label="Canceladas/reembolsadas"
+          value={stats?.cancelled ?? null}
+          tone={stats && stats.cancelled > 0 ? "warning" : "default"}
+        />
       </div>
 
       {error && (
@@ -164,7 +188,7 @@ export default function OrdersPage() {
       )}
 
       {filtered && filtered.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-border">
+        <Card className="overflow-hidden py-0">
           <Table>
             <TableHeader>
               <TableRow>
@@ -200,7 +224,7 @@ export default function OrdersPage() {
               ))}
             </TableBody>
           </Table>
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, apiFetchBlob } from "@/lib/api-client";
 import type { PaginatedResult } from "@/types/catalog";
-import type { ApiOrder, OrderStatus } from "@/types/orders";
+import type { ApiOrder, ApiOrderShipment, OrderStatus } from "@/types/orders";
 
 export interface OrderService {
   getOrders(): Promise<ApiOrder[]>;
@@ -11,6 +11,15 @@ export interface OrderService {
     trackingNumber?: string
   ): Promise<ApiOrder>;
   cancelOrder(id: string, reason?: string): Promise<ApiOrder>;
+  /**
+   * Genera una guía automática Enviatodo/Estafeta. Solo aplica a órdenes
+   * `PAID`/`PROCESSING` cuyo `shippingMethod` esté automatizado (`EXPRESS`
+   * por defecto) — la API rechaza cualquier otro caso con un mensaje ya
+   * pensado para mostrarse tal cual (ver `ApiError.message`).
+   */
+  createShipment(id: string, packageId?: string): Promise<ApiOrderShipment>;
+  /** Descarga el PDF de la guía — se pide al proveedor en cada llamada, nunca queda cacheado. */
+  downloadShipmentLabel(id: string): Promise<Blob>;
 }
 
 export class RestOrderService implements OrderService {
@@ -44,6 +53,20 @@ export class RestOrderService implements OrderService {
       method: "POST",
       body: JSON.stringify({ reason }),
     });
+  }
+
+  async createShipment(
+    id: string,
+    packageId?: string
+  ): Promise<ApiOrderShipment> {
+    return apiFetch<ApiOrderShipment>(`/v1/orders/${id}/shipment`, {
+      method: "POST",
+      body: JSON.stringify({ packageId }),
+    });
+  }
+
+  async downloadShipmentLabel(id: string): Promise<Blob> {
+    return apiFetchBlob(`/v1/orders/${id}/shipment/label`);
   }
 }
 

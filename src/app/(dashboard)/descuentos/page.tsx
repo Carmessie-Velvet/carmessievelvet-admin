@@ -11,9 +11,11 @@ import { discountService } from "@/services/discount-service";
 import { catalogService } from "@/services/catalog-service";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { SectionIcon } from "@/components/ui/section-icon";
 import {
   Card,
   CardContent,
@@ -75,6 +77,7 @@ function fromLocalInputValue(value: string): string | undefined {
 
 export default function DiscountsPage() {
   const router = useRouter();
+  const { confirm } = useConfirmDialog();
   const [discounts, setDiscounts] = useState<ApiProductDiscount[] | null>(null);
   const [products, setProducts] = useState<ApiProduct[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -181,8 +184,12 @@ export default function DiscountsPage() {
   }
 
   async function handleDelete(discount: ApiProductDiscount) {
-    if (!window.confirm(`¿Eliminar el descuento "${discount.name ?? discount.percentage + "%"}"?`))
-      return;
+    const ok = await confirm({
+      title: `¿Eliminar el descuento "${discount.name ?? discount.percentage + "%"}"?`,
+      confirmLabel: "Eliminar",
+      destructive: true,
+    });
+    if (!ok) return;
 
     setBusyId(discount.id);
     try {
@@ -216,9 +223,7 @@ export default function DiscountsPage() {
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <span className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
-                <Percent className="size-4" />
-              </span>
+              <SectionIcon icon={Percent} index={0} />
               <div>
                 <CardTitle>{editingId ? "Editar descuento" : "Nuevo descuento"}</CardTitle>
                 <CardDescription>

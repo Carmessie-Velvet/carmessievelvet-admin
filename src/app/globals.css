@@ -35,6 +35,8 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-velvet-light: var(--velvet-light);
+  --color-sand: var(--sand);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -49,14 +51,25 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
+  /* Fondo tostado suave (no blanco puro) para que las cards blancas resalten
+     encima — mismo truco visual que la referencia (sidebar/cards blancas
+     sobre un fondo crema), aplicado con nuestros propios tonos: es el mismo
+     tinte cálido de --sand, muy aclarado, no un tono nuevo inventado. */
+  --background: oklch(0.98 0.006 55);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: #3f1029;
+  --primary: #4b1530;
   --primary-foreground: oklch(0.985 0 0);
+  /* Segundo y tercer tono de marca — mismos hex exactos que
+     carmessievelvet-web (--color-velvet-light/--color-sand en su
+     globals.css), no colores nuevos inventados para el admin. Solo se usan
+     como acento decorativo en gráficas/badges del dashboard — `--primary`
+     sigue siendo el único acento en botones/links/estados. */
+  --velvet-light: #8c4a63;
+  --sand: #dccfbf;
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -66,21 +79,31 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: #3f1029;
+  --ring: #4b1530;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.145 0 0);
-  --sidebar-foreground: oklch(0.92 0 0);
-  --sidebar-primary: #3f1029;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.22 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.25 0 0);
-  --sidebar-ring: #3f1029;
+  /* 0.5rem -> 0.65rem: pedido explícito de la clienta de un admin "más
+     vistoso" — todo lo que deriva de este token (radius-sm..4xl arriba) se
+     redondea un poco más en toda la app, sin tocar cada componente. */
+  --radius: 0.65rem;
+  /* Sidebar clara (blanco puro, igual que las cards) en vez del sidebar
+     oscuro por defecto de shadcn — pedido explícito: que el nav de la
+     izquierda se vea como el de la referencia (blanco, ítem activo como
+     pastilla sólida), con nuestros colores en vez de naranja. La pastilla
+     activa en sí se pinta directo en AppSidebar.tsx con bg-primary (no con
+     --sidebar-accent) para no confundirla con el hover normal — estas
+     variables solo cubren el hover suave y el texto inactivo. */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: var(--muted-foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.96 0.006 55);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: oklch(0.93 0.006 55);
+  --sidebar-ring: var(--primary);
 }
 
 .dark {
