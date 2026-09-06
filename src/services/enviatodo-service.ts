@@ -2,6 +2,7 @@ import { apiFetch } from "@/lib/api-client";
 import type {
   ApiEnviatodoPackage,
   ApiShippingOrigin,
+  CreateApiEnviatodoPackagePayload,
   MxState,
 } from "@/types/shipping";
 
@@ -18,6 +19,11 @@ export interface EnviatodoService {
     payload: ApiShippingOrigin
   ): Promise<ApiShippingOrigin>;
   getPackages(): Promise<ApiEnviatodoPackage[]>;
+  createPackage(
+    payload: CreateApiEnviatodoPackagePayload
+  ): Promise<ApiEnviatodoPackage>;
+  /** No hay `PATCH` — "editar" es crear uno nuevo y borrar este. */
+  deletePackage(id: string): Promise<void>;
 }
 
 export class RestEnviatodoService implements EnviatodoService {
@@ -40,6 +46,19 @@ export class RestEnviatodoService implements EnviatodoService {
 
   async getPackages(): Promise<ApiEnviatodoPackage[]> {
     return apiFetch<ApiEnviatodoPackage[]>("/v1/shipping/packages");
+  }
+
+  async createPackage(
+    payload: CreateApiEnviatodoPackagePayload
+  ): Promise<ApiEnviatodoPackage> {
+    return apiFetch<ApiEnviatodoPackage>("/v1/shipping/packages", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deletePackage(id: string): Promise<void> {
+    await apiFetch<void>(`/v1/shipping/packages/${id}`, { method: "DELETE" });
   }
 }
 

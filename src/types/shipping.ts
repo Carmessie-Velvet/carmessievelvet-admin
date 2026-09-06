@@ -48,19 +48,47 @@ export interface ApiShippingOrigin {
 }
 
 /**
- * Catálogo de paquetes de Enviatodo (`GET /shipping/packages`) — dimensiones
- * y peso vienen tal cual las devuelve el proveedor, así que algunos campos
- * son opcionales (`EnviatodoPackageDto` del backend los marca así porque su
- * forma real no está 100% documentada). `isDefault` lo calcula la API
- * comparando contra `SHIPPING_ENVIATODO_DEFAULT_PACKAGE_ID`.
+ * Catálogo de paquetes de Enviatodo (`GET/POST /shipping/packages`) — es un
+ * passthrough de lo que devuelve el proveedor, así que trae más campos de
+ * los que el admin necesita mostrar y los que "deberían" ser número
+ * (`height`/`width`/`length`/`weight`/etc.) llegan como **string**
+ * (verificado contra sandbox, ver CLAUDE.md de la API) — nunca hacer
+ * aritmética con ellos sin convertir primero. `isDefault` lo calcula la API
+ * comparando contra `SHIPPING_ENVIATODO_DEFAULT_PACKAGE_ID` — ese paquete no
+ * se puede borrar (`DELETE` responde 409).
  */
 export interface ApiEnviatodoPackage {
   id?: string;
   name?: string;
   package_content?: string;
-  height?: number;
-  width?: number;
-  length?: number;
-  weight?: number;
+  height?: string;
+  width?: string;
+  length?: string;
+  weight?: string;
+  real_weight?: string;
+  volumetric_weight?: string;
+  bill_weight?: string;
+  product_type?: string;
+  unit_type?: string;
+  amount_pkg?: string;
+  default_pkg?: string;
+  created_at?: string;
+  updated_at?: string;
   isDefault: boolean;
+}
+
+/**
+ * `POST /shipping/packages` — el admin solo manda las dimensiones físicas;
+ * `real_weight`/`volumetric_weight`/`bill_weight` los calcula el backend.
+ * No existe un `PATCH` (Enviatodo no lo expone de forma confiable) — "editar"
+ * un paquete es crear uno nuevo con este payload y borrar el anterior.
+ */
+export interface CreateApiEnviatodoPackagePayload {
+  name: string;
+  packageContent: string;
+  height: number;
+  width: number;
+  length: number;
+  weight: number;
+  amountPkg?: number;
 }
