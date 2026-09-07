@@ -6,9 +6,11 @@ import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, PackageSearch, Pencil, PlusCircle, Trash2, Warehouse } from "lucide-react";
+import { Loader2, PackageSearch, Pencil, PlusCircle, Trash2, Wallet, Warehouse } from "lucide-react";
 import { enviatodoService } from "@/services/enviatodo-service";
+import { statsService } from "@/services/stats-service";
 import { ApiError } from "@/lib/api-client";
+import { formatCurrency } from "@/lib/format-currency";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +60,7 @@ import type {
   CreateApiEnviatodoPackagePayload,
   MxState,
 } from "@/types/shipping";
+import type { ApiEnviatodoBalance } from "@/types/stats";
 
 const originSchema = z.object({
   name: z.string().min(1, "Requerido"),
@@ -200,6 +203,9 @@ export default function ShippingAutomationPage() {
   const [editingPackage, setEditingPackage] = useState<ApiEnviatodoPackage | null>(null);
   const [packageBusyId, setPackageBusyId] = useState<string | null>(null);
 
+  const [balance, setBalance] = useState<ApiEnviatodoBalance | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+
   const form = useForm<OriginFormValues>({
     resolver: zodResolver(originSchema),
     defaultValues: emptyValues,
@@ -246,6 +252,15 @@ export default function ShippingAutomationPage() {
       })
       .catch(() => {
         if (!cancelled) setPackagesError("No se pudieron cargar los paquetes de Enviatodo.");
+      });
+
+    statsService
+      .getEnviatodoBalance()
+      .then((data) => {
+        if (!cancelled) setBalance(data);
+      })
+      .catch(() => {
+        if (!cancelled) setBalanceError("No se pudo consultar el saldo — Enviatodo no respondió.");
       });
 
     return () => {
@@ -364,6 +379,33 @@ export default function ShippingAutomationPage() {
           origen es un requisito único antes de poder generar la primera guía desde una orden.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <SectionIcon icon={Wallet} index={1} />
+            <div>
+              <CardTitle>Saldo Enviatodo</CardTitle>
+              <CardDescription>Cuenta usada para generar guías de Estafeta.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {balanceError ? (
+            <p className="text-sm text-muted-foreground">{balanceError}</p>
+          ) : !balance ? (
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          ) : balance.available ? (
+            <p className="text-3xl font-extrabold tracking-tight">
+              {formatCurrency(balance.balance ?? 0, balance.currency)}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No se pudo consultar el saldo — Enviatodo no respondió.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {loadError && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
