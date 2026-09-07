@@ -18,15 +18,17 @@ import {
   TrendingDown,
   TrendingUp,
   Truck,
+  Undo2,
   Users,
   Wallet,
 } from "lucide-react";
 import { statsService } from "@/services/stats-service";
+import { orderService } from "@/services/order-service";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { useCountUp } from "@/hooks/use-count-up";
 import { useCatalogStats } from "@/hooks/use-catalog-stats";
-import { ORDER_STATUS_LABEL, type OrderStatus } from "@/types/orders";
+import { ORDER_STATUS_LABEL, statusBadgeVariant } from "@/types/orders";
 import type { ApiMetric, ApiStatsDashboard } from "@/types/stats";
 import {
   Card,
@@ -154,15 +156,26 @@ function CardLinkChevron() {
   );
 }
 
-function statusBadgeVariant(status: OrderStatus): "default" | "secondary" | "destructive" {
-  if (status === "CANCELLED" || status === "REFUNDED") return "destructive";
-  if (status === "PENDING") return "secondary";
-  return "default";
-}
-
 export default function DashboardPage() {
   const router = useRouter();
   const { catalog, error: catalogError } = useCatalogStats(router);
+  const [pendingReturns, setPendingReturns] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    orderService
+      .getReturnRequests("PENDING")
+      .then((data) => {
+        if (!cancelled) setPendingReturns(data.length);
+      })
+      .catch(() => {
+        // No es crítico para el resto del dashboard — si falla, el StatCard
+        // se queda en "—" en vez de tumbar toda la pantalla.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [rangeDays, setRangeDays] = useState("30");
   const [dashboard, setDashboard] = useState<ApiStatsDashboard | null>(null);
@@ -290,7 +303,7 @@ export default function DashboardPage() {
 
           {/* ---- Catálogo: siempre disponible (no depende del rango de
               fechas), debajo de los KPIs de ventas — pesan menos. ---- */}
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
             <StatCard icon={ShoppingBag} label="Productos" value={catalog?.totalProducts ?? null} tintIndex={0} />
             <StatCard icon={Layers} label="Activos" value={catalog?.activeProducts ?? null} tintIndex={1} />
             <StatCard
@@ -300,6 +313,14 @@ export default function DashboardPage() {
               tone={catalog && catalog.outOfStock > 0 ? "warning" : "default"}
             />
             <StatCard icon={Tags} label="Categorías" value={catalog?.categories ?? null} tintIndex={2} />
+            <Link href="/devoluciones" className="block">
+              <StatCard
+                icon={Undo2}
+                label="Devoluciones pendientes"
+                value={pendingReturns}
+                tone={pendingReturns !== null && pendingReturns > 0 ? "warning" : "default"}
+              />
+            </Link>
           </div>
 
           {/* ---- Fila de gráficas: 1+2+1, todas de altura de "chart" similar

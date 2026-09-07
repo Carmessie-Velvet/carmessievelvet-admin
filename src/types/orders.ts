@@ -5,7 +5,32 @@ export type OrderStatus =
   | "SHIPPED"
   | "DELIVERED"
   | "CANCELLED"
-  | "REFUNDED";
+  | "REFUNDED"
+  | "PARTIALLY_REFUNDED";
+
+/** `POST /orders/:id/cancel` — cuánto reembolsar. Ignorado si la orden es `PENDING` (nunca se cobró). */
+export type RefundMode = "FULL" | "FULL_MINUS_SHIPPING" | "PARTIAL";
+
+export type ReturnRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+/**
+ * Solicitud de devolución que el comprador manda por su cuenta
+ * (`POST /store/orders/return-request`, público) sobre una orden ya
+ * `DELIVERED` — el admin la aprueba (reembolsando vía `/cancel`) o la
+ * rechaza (`/return-request/reject`), nunca la crea. `resolvedAt`/
+ * `resolutionNote`/`refundMode`/`refundedAmount` solo se llenan una vez
+ * resuelta.
+ */
+export interface ApiReturnRequest {
+  id: string;
+  status: ReturnRequestStatus;
+  reason: string;
+  createdAt: string;
+  resolvedAt?: string;
+  resolutionNote?: string;
+  refundMode?: RefundMode;
+  refundedAmount?: number;
+}
 
 /**
  * Dirección estructurada (reemplazó `line1`/`line2` cuando se agregó la
@@ -80,6 +105,10 @@ export interface ApiOrder {
    * para órdenes `STANDARD` (siempre manuales) o `EXPRESS` sin guía todavía.
    */
   shipment?: ApiOrderShipment;
+  /** Decimal en pesos, `0` hasta el primer reembolso (total o parcial). */
+  refundedAmount: number;
+  /** `undefined` salvo que el comprador haya mandado una solicitud de devolución post-entrega. */
+  returnRequest?: ApiReturnRequest | null;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -100,6 +129,7 @@ export const NEXT_MANUAL_STATUS: Record<OrderStatus, OrderStatus | null> = {
   DELIVERED: null,
   CANCELLED: null,
   REFUNDED: null,
+  PARTIALLY_REFUNDED: null,
 };
 
 export const CANCELLABLE_STATUSES: OrderStatus[] = [
@@ -131,4 +161,26 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   DELIVERED: "Entregada",
   CANCELLED: "Cancelada",
   REFUNDED: "Reembolsada",
+  PARTIALLY_REFUNDED: "Reembolso parcial",
 };
+
+export const RETURN_REQUEST_STATUS_LABEL: Record<ReturnRequestStatus, string> = {
+  PENDING: "Pendiente",
+  APPROVED: "Aprobada",
+  REJECTED: "Rechazada",
+};
+
+export const REFUND_MODE_LABEL: Record<RefundMode, string> = {
+  FULL: "Total",
+  FULL_MINUS_SHIPPING: "Total menos envío",
+  PARTIAL: "Monto parcial",
+};
+
+/** Compartido entre las listas/detalle de órdenes y el dashboard — un solo lugar para el color de cada badge de estatus. */
+export function statusBadgeVariant(status: OrderStatus): "default" | "secondary" | "destructive" {
+  if (status === "CANCELLED" || status === "REFUNDED" || status === "PARTIALLY_REFUNDED") {
+    return "destructive";
+  }
+  if (status === "PENDING") return "secondary";
+  return "default";
+}
