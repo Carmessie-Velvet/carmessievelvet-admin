@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Clock, Loader2, Package, PackageSearch, Search } from "lucide-react";
+import { Ban, Clock, Loader2, Package, PackageSearch, Search, Wallet } from "lucide-react";
 import { orderService } from "@/services/order-service";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
@@ -92,6 +92,7 @@ export default function OrdersPage() {
       cancelled: orders.filter((o) =>
         ["CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"].includes(o.status)
       ).length,
+      refundedAmount: orders.reduce((sum, o) => sum + o.refundedAmount, 0),
     };
   }, [orders]);
 
@@ -108,7 +109,7 @@ export default function OrdersPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         <StatCard icon={Package} label="Total" value={stats?.total ?? null} tintIndex={0} />
         <StatCard icon={Clock} label="Pendientes" value={stats?.pending ?? null} tintIndex={1} />
         <StatCard icon={Package} label="Pagadas" value={stats?.paid ?? null} tintIndex={2} />
@@ -117,6 +118,13 @@ export default function OrdersPage() {
           label="Canceladas/reembolsadas"
           value={stats?.cancelled ?? null}
           tone={stats && stats.cancelled > 0 ? "warning" : "default"}
+        />
+        <StatCard
+          icon={Wallet}
+          label="Reembolsado"
+          value={stats?.refundedAmount ?? null}
+          money
+          tone={stats && stats.refundedAmount > 0 ? "warning" : "default"}
         />
       </div>
 
