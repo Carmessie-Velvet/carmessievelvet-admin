@@ -6,9 +6,10 @@ import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, PackageSearch, Pencil, Warehouse } from "lucide-react";
+import { Loader2, PackageSearch, Pencil, PlusCircle, Trash2, Warehouse } from "lucide-react";
 import { enviatodoService } from "@/services/enviatodo-service";
 import { ApiError } from "@/lib/api-client";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionIcon } from "@/components/ui/section-icon";
@@ -20,6 +21,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -43,7 +52,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ApiEnviatodoPackage, ApiShippingOrigin, MxState } from "@/types/shipping";
+import type {
+  ApiEnviatodoPackage,
+  ApiShippingOrigin,
+  CreateApiEnviatodoPackagePayload,
+  MxState,
+} from "@/types/shipping";
 
 const originSchema = z.object({
   name: z.string().min(1, "Requerido"),
@@ -115,8 +129,61 @@ function toPayload(values: OriginFormValues): ApiShippingOrigin {
   };
 }
 
+/**
+ * `POST /shipping/packages` no tiene un `PATCH` equivalente (Enviatodo no lo
+ * expone de forma confiable) — "editar" un paquete en este form crea uno
+ * nuevo con estos valores y borra el anterior, ver `onSubmitPackage`.
+ */
+const packageFormSchema = z.object({
+  name: z.string().min(1, "Requerido").max(100, "Máximo 100 caracteres"),
+  packageContent: z.string().min(1, "Requerido").max(200, "Máximo 200 caracteres"),
+  height: z.number().positive("Debe ser mayor a 0"),
+  width: z.number().positive("Debe ser mayor a 0"),
+  length: z.number().positive("Debe ser mayor a 0"),
+  weight: z.number().positive("Debe ser mayor a 0"),
+  amountPkg: z.number().min(0).optional(),
+});
+
+type PackageFormValues = z.infer<typeof packageFormSchema>;
+
+const emptyPackageValues: PackageFormValues = {
+  name: "",
+  packageContent: "",
+  height: 0,
+  width: 0,
+  length: 0,
+  weight: 0,
+  amountPkg: undefined,
+};
+
+/** Los campos numéricos del paquete llegan como string del backend (passthrough de Enviatodo). */
+function packageToFormValues(pkg: ApiEnviatodoPackage): PackageFormValues {
+  return {
+    name: pkg.name ?? "",
+    packageContent: pkg.package_content ?? "",
+    height: Number(pkg.height ?? 0),
+    width: Number(pkg.width ?? 0),
+    length: Number(pkg.length ?? 0),
+    weight: Number(pkg.weight ?? 0),
+    amountPkg: pkg.amount_pkg ? Number(pkg.amount_pkg) : undefined,
+  };
+}
+
+function numberFieldProps(value: number, onChange: (n: number) => void) {
+  return {
+    type: "number" as const,
+    min: 0,
+    step: "0.01",
+    inputMode: "decimal" as const,
+    value: value || "",
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+      onChange(Number.isNaN(e.target.valueAsNumber) ? 0 : e.target.valueAsNumber),
+  };
+}
+
 export default function ShippingAutomationPage() {
   const router = useRouter();
+  const { confirm } = useConfirmDialog();
   const [states, setStates] = useState<MxState[]>([]);
   const [packages, setPackages] = useState<ApiEnviatodoPackage[] | null>(null);
   const [packagesError, setPackagesError] = useState<string | null>(null);
@@ -129,10 +196,19 @@ export default function ShippingAutomationPage() {
   // había nada guardado.
   const [mode, setMode] = useState<"view" | "edit">("edit");
 
+  const [packageDialogOpen, setPackageDialogOpen] = useState(false);
+  const [editingPackage, setEditingPackage] = useState<ApiEnviatodoPackage | null>(null);
+  const [packageBusyId, setPackageBusyId] = useState<string | null>(null);
+
   const form = useForm<OriginFormValues>({
     resolver: zodResolver(originSchema),
     defaultValues: emptyValues,
     mode: "onBlur",
+  });
+
+  const packageForm = useForm<PackageFormValues>({
+    resolver: zodResolver(packageFormSchema),
+    defaultValues: emptyPackageValues,
   });
 
   useEffect(() => {
@@ -195,6 +271,88 @@ export default function ShippingAutomationPage() {
   function cancelEdit() {
     if (origin) form.reset(toFormValues(origin));
     setMode("view");
+  }
+
+  function openCreatePackage() {
+    setEditingPackage(null);
+    packageForm.reset(emptyPackageValues);
+    setPackageDialogOpen(true);
+  }
+
+  function openEditPackage(pkg: ApiEnviatodoPackage) {
+    setEditingPackage(pkg);
+    packageForm.reset(packageToFormValues(pkg));
+    setPackageDialogOpen(true);
+  }
+
+  async function onSubmitPackage(values: PackageFormValues) {
+    const payload: CreateApiEnviatodoPackagePayload = {
+      name: values.name,
+      packageContent: values.packageContent,
+      height: values.height,
+      width: values.width,
+      length: values.length,
+      weight: values.weight,
+      amountPkg: values.amountPkg,
+    };
+
+    try {
+      // La respuesta del propio POST es el registro completo y confiable
+      // (ver CLAUDE.md de la API) — a diferencia de GET /shipping/packages,
+      // que puede tardar en reflejar un paquete recién creado ("sandbox
+      // quirk" documentado por backend). Por eso el estado local se
+      // actualiza con esta respuesta directamente, nunca recargando la
+      // lista después de escribir.
+      const created = await enviatodoService.createPackage(payload);
+      const previousId = editingPackage?.id;
+
+      if (previousId) {
+        try {
+          await enviatodoService.deletePackage(previousId);
+        } catch {
+          // "Editar" es crear + borrar (Enviatodo no tiene PATCH). Si el
+          // borrado falla (ej. era el paquete default, que rechaza DELETE),
+          // el nuevo ya quedó guardado — avisamos en vez de fingir que todo
+          // salió perfecto, y dejamos el anterior en la lista tal cual.
+          toast.error(
+            "Se creó el paquete nuevo, pero no se pudo borrar el anterior (puede ser el paquete default) — bórralo a mano si ya no lo necesitas."
+          );
+          setPackages((prev) => [...(prev ?? []), created]);
+          setPackageDialogOpen(false);
+          return;
+        }
+      }
+
+      setPackages((prev) => {
+        const withoutOld = previousId ? (prev ?? []).filter((p) => p.id !== previousId) : (prev ?? []);
+        return [...withoutOld, created];
+      });
+      setPackageDialogOpen(false);
+      toast.success(editingPackage ? "Paquete actualizado." : "Paquete creado.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo guardar el paquete.");
+    }
+  }
+
+  async function handleDeletePackage(pkg: ApiEnviatodoPackage) {
+    if (!pkg.id) return;
+    const ok = await confirm({
+      title: `¿Eliminar el paquete "${pkg.name ?? pkg.id}"?`,
+      confirmLabel: "Eliminar",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setPackageBusyId(pkg.id);
+    try {
+      await enviatodoService.deletePackage(pkg.id);
+      setPackages((prev) => (prev ?? []).filter((p) => p.id !== pkg.id));
+      toast.success("Paquete eliminado.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo eliminar el paquete.");
+    } finally {
+      setPackageBusyId(null);
+    }
   }
 
   return (
@@ -525,6 +683,12 @@ export default function ShippingAutomationPage() {
               </CardDescription>
             </div>
           </div>
+          <CardAction>
+            <Button type="button" className="gap-1.5" onClick={openCreatePackage}>
+              <PlusCircle className="size-4" />
+              Nuevo paquete
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {packagesError && (
@@ -554,6 +718,7 @@ export default function ShippingAutomationPage() {
                     <TableHead>Dimensiones (L×A×A cm)</TableHead>
                     <TableHead>Peso</TableHead>
                     <TableHead></TableHead>
+                    <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -580,6 +745,34 @@ export default function ShippingAutomationPage() {
                           </span>
                         )}
                       </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Editar ${pkg.name ?? pkg.id}`}
+                            onClick={() => openEditPackage(pkg)}
+                          >
+                            <Pencil className="size-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Eliminar ${pkg.name ?? pkg.id}`}
+                            disabled={pkg.isDefault || packageBusyId === pkg.id}
+                            title={
+                              pkg.isDefault
+                                ? "No se puede borrar el paquete default (configurado en el backend)"
+                                : undefined
+                            }
+                            onClick={() => handleDeletePackage(pkg)}
+                          >
+                            <Trash2 className="size-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -588,6 +781,133 @@ export default function ShippingAutomationPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingPackage ? "Editar paquete" : "Nuevo paquete"}</DialogTitle>
+            <DialogDescription>
+              {editingPackage
+                ? "Enviatodo no permite editar un paquete directamente — esto crea uno nuevo con estos datos y borra el anterior."
+                : "Dimensiones físicas de la caja — el peso facturable lo calcula Enviatodo."}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...packageForm}>
+            <form onSubmit={packageForm.handleSubmit(onSubmitPackage)} className="flex flex-col gap-4">
+              <FormField
+                control={packageForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Caja chica" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={packageForm.control}
+                name="packageContent"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contenido</FormLabel>
+                    <FormControl>
+                      <Input placeholder="PLAYERAS" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-3 gap-3">
+                <FormField
+                  control={packageForm.control}
+                  name="length"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Largo (cm)</FormLabel>
+                      <FormControl>
+                        <Input {...numberFieldProps(field.value, field.onChange)} onBlur={field.onBlur} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={packageForm.control}
+                  name="width"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ancho (cm)</FormLabel>
+                      <FormControl>
+                        <Input {...numberFieldProps(field.value, field.onChange)} onBlur={field.onBlur} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={packageForm.control}
+                  name="height"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Alto (cm)</FormLabel>
+                      <FormControl>
+                        <Input {...numberFieldProps(field.value, field.onChange)} onBlur={field.onBlur} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={packageForm.control}
+                  name="weight"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Peso (kg)</FormLabel>
+                      <FormControl>
+                        <Input {...numberFieldProps(field.value, field.onChange)} onBlur={field.onBlur} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={packageForm.control}
+                  name="amountPkg"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cantidad declarada (opcional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...numberFieldProps(field.value ?? 0, field.onChange)}
+                          onBlur={field.onBlur}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setPackageDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={packageForm.formState.isSubmitting}>
+                  {packageForm.formState.isSubmitting
+                    ? "Guardando..."
+                    : editingPackage
+                      ? "Guardar cambios"
+                      : "Crear paquete"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
