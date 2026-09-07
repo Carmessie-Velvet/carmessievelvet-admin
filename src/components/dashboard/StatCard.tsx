@@ -1,6 +1,7 @@
 "use client";
 
 import { useCountUp } from "@/hooks/use-count-up";
+import { formatCurrency } from "@/lib/format-currency";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { SECTION_ICON_TINTS } from "@/components/ui/section-icon";
 import { cn } from "@/lib/utils";
@@ -16,12 +17,15 @@ export function StatCard({
   value,
   tone = "default",
   tintIndex = 0,
+  money = false,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number | null;
   tone?: "default" | "warning";
   tintIndex?: number;
+  /** Formatea `value` como moneda en vez de un conteo entero. */
+  money?: boolean;
 }) {
   const animated = useCountUp(value ?? 0);
   return (
@@ -37,7 +41,7 @@ export function StatCard({
         </span>
         <div>
           <CardTitle className="text-3xl font-extrabold tracking-tight tabular-nums">
-            {value === null ? "—" : Math.round(animated)}
+            {value === null ? "—" : money ? formatCurrency(animated) : Math.round(animated)}
           </CardTitle>
           <CardDescription>{label}</CardDescription>
         </div>
