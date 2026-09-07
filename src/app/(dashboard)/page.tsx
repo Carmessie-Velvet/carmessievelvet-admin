@@ -603,23 +603,27 @@ export default function DashboardPage() {
                 <CardLinkChevron />
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-muted-foreground">Total reembolsado</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg bg-destructive/10 px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-destructive">Total reembolsado</p>
                       <ChangeBadge changePct={dashboard.refunds.totalRefunded.changePct} />
                     </div>
-                    <p className="text-lg font-semibold">
+                    <p className="text-2xl font-extrabold tracking-tight text-destructive tabular-nums">
                       {formatCurrency(dashboard.refunds.totalRefunded.value)}
                     </p>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-muted-foreground">Órdenes reembolsadas</p>
+                  <div className="rounded-lg bg-muted px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-muted-foreground">Órdenes reembolsadas</p>
                       <ChangeBadge changePct={dashboard.refunds.ordersRefunded.changePct} />
                     </div>
-                    <p className="text-lg font-semibold">{dashboard.refunds.ordersRefunded.value}</p>
+                    <p className="text-2xl font-extrabold tracking-tight tabular-nums">
+                      {dashboard.refunds.ordersRefunded.value}
+                    </p>
                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   {dashboard.refunds.byStatus.map((s) => (
                     <div key={s.status}>
                       <p className="text-xs text-muted-foreground">{s.label}</p>
