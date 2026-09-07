@@ -13,17 +13,22 @@ import {
   Package,
   Receipt,
   Truck,
+  Undo2,
 } from "lucide-react";
 import { orderService } from "@/services/order-service";
 import { enviatodoService } from "@/services/enviatodo-service";
 import { ApiError } from "@/lib/api-client";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { RefundDialog, type RefundPayload } from "@/components/orders/RefundDialog";
 import { formatCurrency } from "@/lib/format-currency";
 import {
   CANCELLABLE_STATUSES,
   isAutomatedShipping,
   NEXT_MANUAL_STATUS,
   ORDER_STATUS_LABEL,
+  REFUND_MODE_LABEL,
+  RETURN_REQUEST_STATUS_LABEL,
+  statusBadgeVariant,
   type ApiOrder,
 } from "@/types/orders";
 import type { ApiEnviatodoPackage } from "@/types/shipping";
@@ -66,12 +71,6 @@ function packageLabel(pkg: ApiEnviatodoPackage): string {
     .filter(Boolean)
     .join(" — ");
   return pkg.isDefault ? `${parts} (default)` : parts;
-}
-
-function statusBadgeVariant(status: ApiOrder["status"]): "default" | "secondary" | "destructive" {
-  if (status === "CANCELLED" || status === "REFUNDED") return "destructive";
-  if (status === "PENDING") return "secondary";
-  return "default";
 }
 
 /**
@@ -134,6 +133,8 @@ export default function OrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [trackingNumber, setTrackingNumber] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [approveReturnDialogOpen, setApproveReturnDialogOpen] = useState(false);
 
   const [packages, setPackages] = useState<ApiEnviatodoPackage[] | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -253,24 +254,50 @@ export default function OrderDetailPage() {
     }
   }
 
-  async function handleCancel() {
+  async function handleCancelConfirm({ reason, refundMode, amount }: RefundPayload) {
+    if (!order) return;
+    try {
+      const updated = await orderService.cancelOrder(order.id, reason, { refundMode, amount });
+      setOrder(updated);
+      toast.success(
+        order.status === "PENDING" ? "Orden cancelada." : "Orden cancelada y reembolsada."
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo cancelar la orden.");
+      throw err;
+    }
+  }
+
+  async function handleApproveReturnConfirm({ reason, refundMode, amount }: RefundPayload) {
+    if (!order) return;
+    try {
+      const updated = await orderService.cancelOrder(order.id, reason, { refundMode, amount });
+      setOrder(updated);
+      toast.success("Devolución aprobada y reembolsada.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo aprobar la devolución.");
+      throw err;
+    }
+  }
+
+  async function handleRejectReturn() {
     if (!order) return;
     const reason = await prompt({
-      title: "Cancelar orden",
-      description: "¿Por qué se cancela esta orden? (opcional, dejar vacío para omitir)",
-      placeholder: "Motivo de la cancelación",
-      confirmLabel: "Cancelar orden",
+      title: "Rechazar devolución",
+      description: "¿Por qué se rechaza esta solicitud? Se le manda por correo al comprador.",
+      placeholder: "Motivo del rechazo",
+      confirmLabel: "Rechazar solicitud",
       cancelLabel: "Volver",
     });
-    if (reason === null) return; // se cerró el diálogo sin confirmar
+    if (reason === null || !reason.trim()) return;
 
     setBusy(true);
     try {
-      const updated = await orderService.cancelOrder(order.id, reason || undefined);
+      const updated = await orderService.rejectReturnRequest(order.id, reason.trim());
       setOrder(updated);
-      toast.success("Orden cancelada.");
+      toast.success("Solicitud de devolución rechazada.");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "No se pudo cancelar la orden.");
+      toast.error(err instanceof ApiError ? err.message : "No se pudo rechazar la solicitud.");
     } finally {
       setBusy(false);
     }
@@ -370,7 +397,12 @@ export default function OrderDetailPage() {
             </p>
           )}
           {cancellable && (
-            <Button type="button" variant="destructive" disabled={busy} onClick={handleCancel}>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => setCancelDialogOpen(true)}
+            >
               Cancelar orden
             </Button>
           )}
@@ -387,6 +419,12 @@ export default function OrderDetailPage() {
           {order.cancellationReason && (
             <p className="w-full text-sm text-muted-foreground">
               Motivo de cancelación: {order.cancellationReason}
+            </p>
+          )}
+          {order.refundedAmount > 0 && (
+            <p className="w-full text-sm text-muted-foreground">
+              Reembolsado: <span className="font-medium text-foreground">{formatCurrency(order.refundedAmount)}</span>
+              {" "}de {formatCurrency(order.total)}
             </p>
           )}
         </CardContent>
@@ -517,6 +555,63 @@ export default function OrderDetailPage() {
         </CardContent>
       </Card>
 
+      {order.returnRequest && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <SectionIcon icon={Undo2} index={1} />
+              <div>
+                <CardTitle>Solicitud de devolución</CardTitle>
+                <CardDescription>
+                  El comprador la mandó el {new Date(order.returnRequest.createdAt).toLocaleString("es-MX")}.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <Badge
+                variant={
+                  order.returnRequest.status === "REJECTED"
+                    ? "destructive"
+                    : order.returnRequest.status === "APPROVED"
+                      ? "default"
+                      : "secondary"
+                }
+              >
+                {RETURN_REQUEST_STATUS_LABEL[order.returnRequest.status]}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Motivo: <span className="text-foreground">{order.returnRequest.reason}</span>
+            </p>
+
+            {order.returnRequest.status === "PENDING" ? (
+              <div className="flex flex-wrap gap-3">
+                <Button type="button" onClick={() => setApproveReturnDialogOpen(true)} disabled={busy}>
+                  Aprobar (reembolsar)
+                </Button>
+                <Button type="button" variant="outline" onClick={handleRejectReturn} disabled={busy}>
+                  Rechazar
+                </Button>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                {order.returnRequest.resolutionNote && (
+                  <p>Nota: {order.returnRequest.resolutionNote}</p>
+                )}
+                {order.returnRequest.refundMode && (
+                  <p>Modo de reembolso: {REFUND_MODE_LABEL[order.returnRequest.refundMode]}</p>
+                )}
+                {order.returnRequest.resolvedAt && (
+                  <p>Resuelta el {new Date(order.returnRequest.resolvedAt).toLocaleString("es-MX")}.</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -606,6 +701,27 @@ export default function OrderDetailPage() {
         <StatusGuideCard />
       </aside>
       </div>
+
+      <RefundDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        order={order}
+        title="Cancelar orden"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Cancelar orden"
+        destructive
+        onConfirm={handleCancelConfirm}
+      />
+      <RefundDialog
+        open={approveReturnDialogOpen}
+        onOpenChange={setApproveReturnDialogOpen}
+        order={order}
+        title="Aprobar devolución"
+        description="Se reembolsa vía Stripe y la solicitud queda marcada como aprobada."
+        confirmLabel="Aprobar y reembolsar"
+        defaultRefundMode="FULL_MINUS_SHIPPING"
+        onConfirm={handleApproveReturnConfirm}
+      />
     </div>
   );
 }

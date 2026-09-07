@@ -27,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ApiOrder, OrderStatus } from "@/types/orders";
-import { ORDER_STATUS_LABEL } from "@/types/orders";
+import { ORDER_STATUS_LABEL, statusBadgeVariant } from "@/types/orders";
 
 const STATUS_OPTIONS: OrderStatus[] = [
   "PENDING",
@@ -37,13 +37,8 @@ const STATUS_OPTIONS: OrderStatus[] = [
   "DELIVERED",
   "CANCELLED",
   "REFUNDED",
+  "PARTIALLY_REFUNDED",
 ];
-
-function statusBadgeVariant(status: OrderStatus): "default" | "secondary" | "destructive" {
-  if (status === "CANCELLED" || status === "REFUNDED") return "destructive";
-  if (status === "PENDING") return "secondary";
-  return "default";
-}
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -94,7 +89,9 @@ export default function OrdersPage() {
       total: orders.length,
       pending: orders.filter((o) => o.status === "PENDING").length,
       paid: orders.filter((o) => o.status === "PAID").length,
-      cancelled: orders.filter((o) => o.status === "CANCELLED" || o.status === "REFUNDED").length,
+      cancelled: orders.filter((o) =>
+        ["CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"].includes(o.status)
+      ).length,
     };
   }, [orders]);
 
