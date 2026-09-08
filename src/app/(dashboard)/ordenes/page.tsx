@@ -61,6 +61,7 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
+  const [shippingMethodFilter, setShippingMethodFilter] = useState<string>("ALL");
   const [page, setPage] = useState(1);
   const [exportOpen, setExportOpen] = useState(false);
 
@@ -86,10 +87,22 @@ export default function OrdersPage() {
     };
   }, [router]);
 
+  // Códigos de método de envío que existen de verdad en las órdenes ya
+  // cargadas (no un catálogo hardcodeado) — el catálogo real vive en
+  // /metodos-envio y puede crecer, así que el filtro se arma solo con lo
+  // que ya se ve en la lista, mismo criterio que el resto de esta pantalla.
+  const shippingMethodOptions = useMemo(() => {
+    if (!orders) return [];
+    return [...new Set(orders.map((o) => o.shippingMethod))].sort();
+  }, [orders]);
+
   const filtered = useMemo(() => {
     if (!orders) return null;
     return orders.filter((order) => {
       if (statusFilter !== "ALL" && order.status !== statusFilter) return false;
+      if (shippingMethodFilter !== "ALL" && order.shippingMethod !== shippingMethodFilter) {
+        return false;
+      }
       if (!query.trim()) return true;
       const q = query.trim().toLowerCase();
       return (
@@ -98,7 +111,7 @@ export default function OrdersPage() {
         order.shippingAddress.fullName.toLowerCase().includes(q)
       );
     });
-  }, [orders, query, statusFilter]);
+  }, [orders, query, statusFilter, shippingMethodFilter]);
 
   const stats = useMemo(() => {
     if (!orders) return null;
@@ -209,6 +222,27 @@ export default function OrdersPage() {
               ))}
             </SelectContent>
           </Select>
+          <Select
+            value={shippingMethodFilter}
+            onValueChange={(v) => {
+              setShippingMethodFilter(v ?? "ALL");
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue>
+                {(value: string) => (value === "ALL" ? "Todos los envíos" : value)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todos los envíos</SelectItem>
+              {shippingMethodOptions.map((method) => (
+                <SelectItem key={method} value={method}>
+                  {method}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
@@ -238,6 +272,7 @@ export default function OrdersPage() {
                 <TableRow>
                   <TableHead>Orden</TableHead>
                   <TableHead>Cliente</TableHead>
+                  <TableHead>Envío</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Total</TableHead>
                   <TableHead>Fecha</TableHead>
@@ -254,6 +289,12 @@ export default function OrdersPage() {
                     <TableCell className="text-muted-foreground">
                       {order.shippingAddress.fullName}
                       <div className="text-xs">{order.email}</div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {order.shippingMethod}
+                      {order.shippingMethodDescription && (
+                        <div className="text-xs">{order.shippingMethodDescription}</div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={statusBadgeVariant(order.status)}>
