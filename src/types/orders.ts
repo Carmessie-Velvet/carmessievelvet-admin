@@ -93,6 +93,15 @@ export interface ApiOrder {
   shippingMethod: string;
   /** Snapshot de la descripción del método al momento de la compra. */
   shippingMethodDescription?: string;
+  /**
+   * Paquetería (ej. "Correos de México", "Estafeta") — snapshot del catálogo
+   * de métodos de envío al momento de la compra, pero un admin puede
+   * sobreescribirla para esta orden puntual vía `PATCH /orders/:id/status`
+   * (típicamente junto con `trackingNumber` al pasar a `SHIPPED` en un envío
+   * `STANDARD`, que siempre es manual). Ausente en órdenes viejas o si el
+   * método de envío nunca tuvo `carrier` configurado.
+   */
+  carrier?: string;
   total: number;
   couponCode?: string;
   items: OrderItem[];

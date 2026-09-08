@@ -132,6 +132,7 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [trackingNumber, setTrackingNumber] = useState("");
+  const [carrier, setCarrier] = useState("");
   const [busy, setBusy] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [approveReturnDialogOpen, setApproveReturnDialogOpen] = useState(false);
@@ -150,6 +151,7 @@ export default function OrderDetailPage() {
         if (!cancelled) {
           setOrder(data);
           setTrackingNumber(data.trackingNumber ?? "");
+          setCarrier(data.carrier ?? "");
         }
       })
       .catch((err: unknown) => {
@@ -243,9 +245,11 @@ export default function OrderDetailPage() {
       const updated = await orderService.updateOrderStatus(
         order.id,
         next,
-        next === "SHIPPED" ? trackingNumber || undefined : undefined
+        next === "SHIPPED" ? trackingNumber || undefined : undefined,
+        next === "SHIPPED" ? carrier || undefined : undefined
       );
       setOrder(updated);
+      setCarrier(updated.carrier ?? "");
       toast.success(`Orden marcada como ${ORDER_STATUS_LABEL[next]}.`);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo actualizar el estado.");
@@ -372,12 +376,20 @@ export default function OrderDetailPage() {
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           {showManualAdvance && next === "SHIPPED" && (
-            <Input
-              value={trackingNumber}
-              onChange={(e) => setTrackingNumber(e.target.value)}
-              placeholder="Número de rastreo (opcional)"
-              className="max-w-56"
-            />
+            <>
+              <Input
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                placeholder="Número de rastreo (opcional)"
+                className="max-w-56"
+              />
+              <Input
+                value={carrier}
+                onChange={(e) => setCarrier(e.target.value)}
+                placeholder="Paquetería (ej. Correos de México)"
+                className="max-w-56"
+              />
+            </>
           )}
           {showManualAdvance && next && (
             <Button type="button" disabled={busy} onClick={advanceStatus}>
@@ -414,6 +426,7 @@ export default function OrderDetailPage() {
           {order.trackingNumber && (
             <p className="w-full text-sm text-muted-foreground">
               Rastreo: <span className="font-medium text-foreground">{order.trackingNumber}</span>
+              {order.carrier ? ` (${order.carrier})` : ""}
             </p>
           )}
           {order.cancellationReason && (
@@ -462,6 +475,11 @@ export default function OrderDetailPage() {
             Envío: <span className="font-medium text-foreground">{order.shippingMethod}</span>
             {order.shippingMethodDescription ? ` — ${order.shippingMethodDescription}` : ""}
           </p>
+          {order.carrier && (
+            <p className="text-muted-foreground sm:col-span-2">
+              Paquetería: <span className="font-medium text-foreground">{order.carrier}</span>
+            </p>
+          )}
           {order.notes && (
             <p className="mt-2 text-muted-foreground sm:col-span-2">Notas: {order.notes}</p>
           )}
