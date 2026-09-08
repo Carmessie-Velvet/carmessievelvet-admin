@@ -21,7 +21,9 @@ export interface OrderService {
   updateOrderStatus(
     id: string,
     status: OrderStatus,
-    trackingNumber?: string
+    trackingNumber?: string,
+    /** Sobreescribe `ApiOrder.carrier` solo para esta orden — típicamente junto con `trackingNumber` al pasar a `SHIPPED`. */
+    carrier?: string
   ): Promise<ApiOrder>;
   cancelOrder(id: string, reason: string, options?: CancelOrderOptions): Promise<ApiOrder>;
   /**
@@ -57,11 +59,12 @@ export class RestOrderService implements OrderService {
   async updateOrderStatus(
     id: string,
     status: OrderStatus,
-    trackingNumber?: string
+    trackingNumber?: string,
+    carrier?: string
   ): Promise<ApiOrder> {
     return apiFetch<ApiOrder>(`/v1/orders/${id}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ status, trackingNumber }),
+      body: JSON.stringify({ status, trackingNumber, carrier }),
     });
   }
 
