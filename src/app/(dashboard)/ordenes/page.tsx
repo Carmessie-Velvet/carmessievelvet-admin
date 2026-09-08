@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Download,
   Loader2,
   Package,
   PackageSearch,
@@ -22,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { ExportProductionDialog } from "@/components/orders/ExportProductionDialog";
 import {
   Select,
   SelectContent,
@@ -60,6 +62,7 @@ export default function OrdersPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
   const [page, setPage] = useState(1);
+  const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,15 +122,23 @@ export default function OrdersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Órdenes</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {orders
-            ? `${orders.length} orden${orders.length === 1 ? "" : "es"} en total.`
-            : error
-              ? "No se pudieron cargar las órdenes."
-              : "Cargando órdenes desde la API..."}
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Órdenes</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {orders
+              ? `${orders.length} orden${orders.length === 1 ? "" : "es"} en total.`
+              : error
+                ? "No se pudieron cargar las órdenes."
+                : "Cargando órdenes desde la API..."}
+          </p>
+        </div>
+        {orders && orders.length > 0 && (
+          <Button type="button" variant="outline" className="gap-1.5" onClick={() => setExportOpen(true)}>
+            <Download className="size-4" />
+            Exportar producción
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
@@ -296,6 +307,8 @@ export default function OrdersPage() {
           )}
         </>
       )}
+
+      <ExportProductionDialog open={exportOpen} onOpenChange={setExportOpen} orders={orders ?? []} />
     </div>
   );
 }
