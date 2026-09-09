@@ -12,6 +12,7 @@ import {
   MapPin,
   Package,
   Receipt,
+  RefreshCw,
   Truck,
   Undo2,
 } from "lucide-react";
@@ -29,9 +30,10 @@ import {
   REFUND_MODE_LABEL,
   RETURN_REQUEST_STATUS_LABEL,
   statusBadgeVariant,
+  type ApiAdminOrderShipment,
   type ApiOrder,
 } from "@/types/orders";
-import type { ApiEnviatodoPackage } from "@/types/shipping";
+import type { ApiEnviatodoPackage, ApiShipmentQuote } from "@/types/shipping";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -142,6 +144,11 @@ export default function OrderDetailPage() {
   const [shipmentBusy, setShipmentBusy] = useState(false);
   const [labelBusy, setLabelBusy] = useState(false);
 
+  const [quotes, setQuotes] = useState<ApiShipmentQuote[] | null>(null);
+  const [quotesLoading, setQuotesLoading] = useState(false);
+  const [selectedQuote, setSelectedQuote] = useState<ApiShipmentQuote | null>(null);
+  const [adminShipment, setAdminShipment] = useState<ApiAdminOrderShipment | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -199,15 +206,59 @@ export default function OrderDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id, order?.status, order?.shipment]);
 
+  useEffect(() => {
+    if (!order?.shipment) return;
+
+    let cancelled = false;
+    orderService
+      .getAdminShipment(order.id)
+      .then((data) => {
+        if (!cancelled) setAdminShipment(data);
+      })
+      .catch(() => {
+        // No es crítico — la card ya muestra lo básico desde order.shipment.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [order?.id, order?.shipment]);
+
+  async function fetchQuotes() {
+    if (!order) return;
+
+    setQuotesLoading(true);
+    setQuotes(null);
+    setSelectedQuote(null);
+    try {
+      const data = await orderService.quoteShipment(order.id, selectedPackageId || undefined);
+      setQuotes(data);
+      if (data.length === 0) {
+        toast.warning("Ninguna paquetería respondió con cotización — puede ser algo pasajero.");
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudieron cotizar las paqueterías.");
+    } finally {
+      setQuotesLoading(false);
+    }
+  }
+
   async function generateShipment() {
     if (!order) return;
 
     setShipmentBusy(true);
     try {
-      await orderService.createShipment(order.id, selectedPackageId || undefined);
+      await orderService.createShipment(
+        order.id,
+        selectedPackageId || undefined,
+        selectedQuote?.providerId,
+        selectedQuote?.providerServiceId
+      );
       const refreshed = await orderService.getOrder(order.id);
       setOrder(refreshed);
       setTrackingNumber(refreshed.trackingNumber ?? "");
+      setQuotes(null);
+      setSelectedQuote(null);
       toast.success("Guía generada correctamente.");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo generar la guía.");
@@ -512,6 +563,16 @@ export default function OrderDetailPage() {
                     Guía: <span className="font-medium text-foreground">{order.shipment.trackingId}</span>
                   </p>
                 )}
+                {adminShipment?.providerServiceName && (
+                  <p className="text-muted-foreground">
+                    Servicio: <span className="font-medium text-foreground">{adminShipment.providerServiceName}</span>
+                  </p>
+                )}
+                {adminShipment?.quotedAmount !== undefined && (
+                  <p className="text-muted-foreground">
+                    Costo real: <span className="font-medium text-foreground">{formatCurrency(adminShipment.quotedAmount)}</span>
+                  </p>
+                )}
                 <p className="text-muted-foreground sm:col-span-2">
                   Estatus de la paquetería:{" "}
                   {order.shipment.carrierStatus ? (
@@ -540,29 +601,98 @@ export default function OrderDetailPage() {
               no se genera guía automática.
             </p>
           ) : SHIPMENT_ELIGIBLE_STATUSES.includes(order.status) ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <Select
-                value={selectedPackageId || null}
-                onValueChange={(v) => setSelectedPackageId(v ?? "")}
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Select
+                  value={selectedPackageId || null}
+                  onValueChange={(v) => {
+                    setSelectedPackageId(v ?? "");
+                    setQuotes(null);
+                    setSelectedQuote(null);
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-80">
+                    <SelectValue placeholder="Selecciona un paquete">
+                      {(id: string) => {
+                        const pkg = packages?.find((p) => p.id === id);
+                        return pkg ? packageLabel(pkg) : "Selecciona un paquete";
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(packages ?? []).map((pkg) => (
+                      <SelectItem key={pkg.id} value={pkg.id ?? ""}>
+                        {packageLabel(pkg)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={quotesLoading || !packages}
+                  onClick={fetchQuotes}
+                >
+                  <RefreshCw className={cn("size-4", quotesLoading && "animate-spin")} />
+                  {quotesLoading ? "Cotizando..." : quotes ? "Volver a cotizar" : "Cotizar paqueterías"}
+                </Button>
+              </div>
+
+              {quotes && quotes.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Cotizado con {quotes.length} paquetería{quotes.length === 1 ? "" : "s"}, de más barata a más cara — el comprador ya pagó el envío al momento de la compra, esto es solo lo que cobraría Enviatodo.
+                  </p>
+                  {quotes.map((quote) => {
+                    const isSelected =
+                      selectedQuote?.providerId === quote.providerId &&
+                      selectedQuote?.providerServiceId === quote.providerServiceId;
+                    return (
+                      <button
+                        key={`${quote.providerId}-${quote.providerServiceId}`}
+                        type="button"
+                        onClick={() => setSelectedQuote(quote)}
+                        className={cn(
+                          "flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                          isSelected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                        )}
+                      >
+                        <div>
+                          <p className="font-medium">
+                            {quote.carrier} — {quote.serviceName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {quote.viaTransport}
+                            {quote.estimatedDate &&
+                              ` · Estimado: ${new Date(quote.estimatedDate).toLocaleDateString("es-MX")}`}
+                          </p>
+                        </div>
+                        <span className="shrink-0 font-semibold">{formatCurrency(quote.amount)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {quotes && quotes.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Ninguna paquetería respondió con cotización en este momento — puedes generar la
+                  guía con la paquetería predeterminada o volver a cotizar.
+                </p>
+              )}
+
+              <Button
+                type="button"
+                disabled={shipmentBusy || !packages || (!!quotes && quotes.length > 0 && !selectedQuote)}
+                className="w-fit"
+                onClick={generateShipment}
               >
-                <SelectTrigger className="w-full sm:w-80">
-                  <SelectValue placeholder="Selecciona un paquete">
-                    {(id: string) => {
-                      const pkg = packages?.find((p) => p.id === id);
-                      return pkg ? packageLabel(pkg) : "Selecciona un paquete";
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {(packages ?? []).map((pkg) => (
-                    <SelectItem key={pkg.id} value={pkg.id ?? ""}>
-                      {packageLabel(pkg)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button type="button" disabled={shipmentBusy || !packages} onClick={generateShipment}>
-                {shipmentBusy ? "Generando..." : "Generar guía"}
+                {shipmentBusy
+                  ? "Generando..."
+                  : selectedQuote
+                    ? `Generar guía con ${selectedQuote.carrier} (${formatCurrency(selectedQuote.amount)})`
+                    : "Generar guía (paquetería predeterminada)"}
               </Button>
             </div>
           ) : (
