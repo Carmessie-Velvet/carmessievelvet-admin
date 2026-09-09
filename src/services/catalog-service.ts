@@ -3,8 +3,10 @@ import type {
   ApiCategory,
   ApiProduct,
   ApiTag,
+  CreateApiCategoryPayload,
   CreateApiProductPayload,
   PaginatedResult,
+  UpdateApiCategoryPayload,
   UpdateApiProductPayload,
 } from "@/types/catalog";
 
@@ -19,6 +21,9 @@ export interface CatalogService {
   getProducts(): Promise<ApiProduct[]>;
   getProduct(sku: string): Promise<ApiProduct>;
   getCategories(): Promise<ApiCategory[]>;
+  createCategory(payload: CreateApiCategoryPayload): Promise<ApiCategory>;
+  updateCategory(id: string, payload: UpdateApiCategoryPayload): Promise<ApiCategory>;
+  deleteCategory(id: string): Promise<boolean>;
   createProduct(payload: CreateApiProductPayload): Promise<ApiProduct>;
   updateProduct(
     sku: string,
@@ -50,6 +55,27 @@ export class RestCatalogService implements CatalogService {
 
   async getCategories(): Promise<ApiCategory[]> {
     return apiFetch<ApiCategory[]>("/v1/categories");
+  }
+
+  async createCategory(payload: CreateApiCategoryPayload): Promise<ApiCategory> {
+    return apiFetch<ApiCategory>("/v1/categories", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateCategory(
+    id: string,
+    payload: UpdateApiCategoryPayload
+  ): Promise<ApiCategory> {
+    return apiFetch<ApiCategory>(`/v1/categories/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteCategory(id: string): Promise<boolean> {
+    return apiFetch<boolean>(`/v1/categories/${id}`, { method: "DELETE" });
   }
 
   async createProduct(payload: CreateApiProductPayload): Promise<ApiProduct> {

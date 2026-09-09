@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/form";
 import { ExistingImagesManager } from "@/components/products/ExistingImagesManager";
 import { VariantManager } from "@/components/products/VariantManager";
+import { ComponentManager } from "@/components/products/ComponentManager";
 import { TagPicker } from "@/components/products/TagPicker";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +69,18 @@ function valuesFromProduct(product: ApiProduct): ProductEditFormValues {
         soldOut: variant?.soldOut ?? false,
       };
     }),
+    components: product.components
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((component) => ({
+        name: component.name,
+        variants: component.variants.map((v) => ({
+          size: v.size,
+          color: v.color ?? "",
+          stock: v.stock,
+          soldOut: v.soldOut,
+        })),
+      })),
   };
 }
 
@@ -181,6 +194,9 @@ function ProductEditForm({
   });
 
   const madeToOrder = useWatch({ control: form.control, name: "madeToOrder" });
+  const categoryId = useWatch({ control: form.control, name: "categoryId" });
+  const selectedCategory = categories.find((c) => c.id === categoryId);
+  const isSet = selectedCategory?.type === "SET";
 
   async function handleDelete() {
     const ok = await confirm({
@@ -205,6 +221,11 @@ function ProductEditForm({
   }
 
   async function onSubmit(values: ProductEditFormValues) {
+    if (isSet && values.components.length < 2) {
+      toast.error("Un set necesita al menos 2 prendas.");
+      return;
+    }
+
     try {
       const updated = await catalogService.updateProduct(currentSku, {
         name: values.name,
@@ -212,11 +233,12 @@ function ProductEditForm({
         price: values.price,
         categoryId: values.categoryId,
         sku: values.sku || undefined,
-        color: values.color,
         active: values.active,
         madeToOrder: values.madeToOrder,
         tagIds: values.tagIds,
-        variants: values.variants,
+        ...(isSet
+          ? { components: values.components }
+          : { color: values.color, variants: values.variants }),
       });
 
       onProductChange(updated);
@@ -363,20 +385,22 @@ function ProductEditForm({
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <FormField
-                  control={form.control}
-                  name="color"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Color</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ej. Negro" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <div className={cn("grid grid-cols-1 gap-4", isSet ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
+                {!isSet && (
+                  <FormField
+                    control={form.control}
+                    name="color"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Color</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej. Negro" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <FormField
                   control={form.control}
@@ -481,10 +505,11 @@ function ProductEditForm({
               <div className="flex items-center gap-3">
                 <SectionIcon icon={Layers} index={2} />
                 <div>
-                  <CardTitle>Stock por talla</CardTitle>
+                  <CardTitle>{isSet ? "Prendas del set" : "Stock por talla"}</CardTitle>
                   <CardDescription>
-                    Cuánto stock hay disponible en cada talla, o márcalo como
-                    sobre pedido para venderlo sin inventario.
+                    {isSet
+                      ? "Cada prenda tiene su propio color y stock por talla — el comprador elige por prenda, no por el producto."
+                      : "Cuánto stock hay disponible en cada talla, o márcalo como sobre pedido para venderlo sin inventario."}
                   </CardDescription>
                 </div>
               </div>
@@ -511,21 +536,39 @@ function ProductEditForm({
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="variants"
-                render={({ field }) => (
-                  <FormItem>
-                    <VariantManager
-                      value={field.value}
-                      onChange={field.onChange}
-                      sizes={commonSizes}
-                      madeToOrder={madeToOrder}
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {isSet ? (
+                <FormField
+                  control={form.control}
+                  name="components"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ComponentManager
+                        value={field.value}
+                        onChange={field.onChange}
+                        sizes={commonSizes}
+                        madeToOrder={madeToOrder}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : (
+                <FormField
+                  control={form.control}
+                  name="variants"
+                  render={({ field }) => (
+                    <FormItem>
+                      <VariantManager
+                        value={field.value}
+                        onChange={field.onChange}
+                        sizes={commonSizes}
+                        madeToOrder={madeToOrder}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </CardContent>
           </Card>
 

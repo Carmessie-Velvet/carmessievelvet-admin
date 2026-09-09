@@ -7,6 +7,22 @@ export const productVariantSchema = z.object({
   soldOut: z.boolean(),
 });
 
+/** Una variante talla×color dentro de una prenda (`components[]`) de un set. */
+export const componentVariantSchema = z.object({
+  size: z.string().min(1),
+  color: z.string().trim().max(50, "Máximo 50 caracteres"),
+  stock: z.number().min(0, "El stock no puede ser negativo"),
+  soldOut: z.boolean(),
+});
+
+/** Una "prenda" de un producto en una categoría `SET` (ej. "Top", "Panty"). */
+export const productComponentSchema = z.object({
+  name: z.string().trim().min(1, "Nombre de la prenda requerido"),
+  variants: z
+    .array(componentVariantSchema)
+    .min(1, "Agrega al menos una variante"),
+});
+
 const productFieldsSchema = z.object({
   name: z.string().min(3, "El nombre debe tener al menos 3 caracteres"),
   price: z
@@ -33,9 +49,16 @@ const productFieldsSchema = z.object({
    */
   madeToOrder: z.boolean(),
   tagIds: z.array(z.string()),
+  /** Solo se usa (y valida) si la categoría elegida es `SIMPLE` — ver `components`. */
   variants: z
     .array(productVariantSchema)
     .min(1, "Agrega al menos una variante"),
+  /**
+   * Solo se usa si la categoría elegida es `SET` — validación de "mínimo 2
+   * prendas" vive en el `onSubmit` del form (necesita el `type` de la
+   * categoría seleccionada, que no vive en este schema).
+   */
+  components: z.array(productComponentSchema),
 });
 
 export const productFormSchema = productFieldsSchema.extend({
@@ -58,6 +81,7 @@ export const defaultProductFormValues: ProductFormValues = {
   tagIds: [],
   images: [],
   variants: commonSizes.map((size) => ({ size, stock: 0, soldOut: false })),
+  components: [],
 };
 
 /**
