@@ -820,7 +820,20 @@ export default function OrderDetailPage() {
                         {item.productSku}
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{item.size}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {item.selections && item.selections.length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          {item.selections.map((selection) => (
+                            <span key={selection.id} className="text-xs whitespace-nowrap">
+                              {selection.componentName}: {selection.size}
+                              {selection.color ? ` (${selection.color})` : ""}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        item.size
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{item.quantity}</TableCell>
                     <TableCell>{formatCurrency(item.unitFinalPrice)}</TableCell>
                     <TableCell>{formatCurrency(item.lineTotal)}</TableCell>
