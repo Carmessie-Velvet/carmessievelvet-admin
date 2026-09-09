@@ -665,7 +665,7 @@ export default function OrderDetailPage() {
                           <p className="text-xs text-muted-foreground">
                             {quote.viaTransport}
                             {quote.estimatedDate &&
-                              ` · Estimado: ${new Date(quote.estimatedDate).toLocaleDateString("es-MX")}`}
+                              ` · Estimado: ${new Date(quote.estimatedDate).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}`}
                           </p>
                         </div>
                         <span className="shrink-0 font-semibold">{formatCurrency(quote.amount)}</span>
@@ -675,6 +675,13 @@ export default function OrderDetailPage() {
                 </div>
               )}
 
+              {quotes === null && (
+                <p className="text-sm text-muted-foreground">
+                  Cotiza primero para poder elegir la paquetería — la guía no se genera sin
+                  comparar opciones antes.
+                </p>
+              )}
+
               {quotes && quotes.length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   Ninguna paquetería respondió con cotización en este momento — puedes generar la
@@ -682,18 +689,20 @@ export default function OrderDetailPage() {
                 </p>
               )}
 
-              <Button
-                type="button"
-                disabled={shipmentBusy || !packages || (!!quotes && quotes.length > 0 && !selectedQuote)}
-                className="w-fit"
-                onClick={generateShipment}
-              >
-                {shipmentBusy
-                  ? "Generando..."
-                  : selectedQuote
-                    ? `Generar guía con ${selectedQuote.carrier} (${formatCurrency(selectedQuote.amount)})`
-                    : "Generar guía (paquetería predeterminada)"}
-              </Button>
+              {quotes !== null && (
+                <Button
+                  type="button"
+                  disabled={shipmentBusy || !packages || (quotes.length > 0 && !selectedQuote)}
+                  className="w-fit"
+                  onClick={generateShipment}
+                >
+                  {shipmentBusy
+                    ? "Generando..."
+                    : selectedQuote
+                      ? `Generar guía con ${selectedQuote.carrier} (${formatCurrency(selectedQuote.amount)})`
+                      : "Generar guía (paquetería predeterminada)"}
+                </Button>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
