@@ -1,12 +1,14 @@
 import { apiFetch, apiFetchBlob } from "@/lib/api-client";
 import type { PaginatedResult } from "@/types/catalog";
 import type {
+  ApiAdminOrderShipment,
   ApiOrder,
   ApiOrderShipment,
   OrderStatus,
   RefundMode,
   ReturnRequestStatus,
 } from "@/types/orders";
+import type { ApiShipmentQuote } from "@/types/shipping";
 
 export interface CancelOrderOptions {
   /** Default `FULL` — se ignora del todo si la orden nunca se pagó (`PENDING`). */
@@ -27,14 +29,31 @@ export interface OrderService {
   ): Promise<ApiOrder>;
   cancelOrder(id: string, reason: string, options?: CancelOrderOptions): Promise<ApiOrder>;
   /**
-   * Genera una guía automática Enviatodo/Estafeta. Solo aplica a órdenes
+   * Cotiza la orden contra todas las paqueterías/servicios habilitados en
+   * la cuenta de Enviatodo, sin generar ni cobrar nada — para que el admin
+   * elija antes de llamar `createShipment`. Ya viene ordenada de más
+   * barata a más cara. Mismas reglas de elegibilidad que `createShipment`,
+   * pero sí funciona aunque la orden ya tenga una guía activa.
+   */
+  quoteShipment(id: string, packageId?: string): Promise<ApiShipmentQuote[]>;
+  /**
+   * Genera una guía automática vía Enviatodo. Solo aplica a órdenes
    * `PAID`/`PROCESSING` cuyo `shippingMethod` esté automatizado (`EXPRESS`
    * por defecto) — la API rechaza cualquier otro caso con un mensaje ya
-   * pensado para mostrarse tal cual (ver `ApiError.message`).
+   * pensado para mostrarse tal cual (ver `ApiError.message`). `providerId`/
+   * `providerServiceId` (de `quoteShipment`) eligen la paquetería — si se
+   * omiten, la API usa la que tenga configurada por default.
    */
-  createShipment(id: string, packageId?: string): Promise<ApiOrderShipment>;
+  createShipment(
+    id: string,
+    packageId?: string,
+    providerId?: string,
+    providerServiceId?: string
+  ): Promise<ApiOrderShipment>;
   /** Descarga el PDF de la guía — se pide al proveedor en cada llamada, nunca queda cacheado. */
   downloadShipmentLabel(id: string): Promise<Blob>;
+  /** Detalle admin de la guía activa (costo real y paquetería elegida) — más ancho que `ApiOrder.shipment`, que es lo que ve el comprador. */
+  getAdminShipment(id: string): Promise<ApiAdminOrderShipment>;
   /** Órdenes con una solicitud de devolución en el estatus dado — típicamente `PENDING`, sin resolver. */
   getReturnRequests(status: ReturnRequestStatus): Promise<ApiOrder[]>;
   /** Rechaza la solicitud de devolución pendiente de la orden sin reembolsar nada. */
@@ -79,18 +98,33 @@ export class RestOrderService implements OrderService {
     });
   }
 
+  async quoteShipment(id: string, packageId?: string): Promise<ApiShipmentQuote[]> {
+    const qs = packageId ? `?packageId=${encodeURIComponent(packageId)}` : "";
+    return apiFetch<ApiShipmentQuote[]>(`/v1/orders/${id}/shipment/quotes${qs}`);
+  }
+
   async createShipment(
     id: string,
-    packageId?: string
+    packageId?: string,
+    providerId?: string,
+    providerServiceId?: string
   ): Promise<ApiOrderShipment> {
     return apiFetch<ApiOrderShipment>(`/v1/orders/${id}/shipment`, {
       method: "POST",
-      body: JSON.stringify({ packageId }),
+      body: JSON.stringify({
+        packageId,
+        providerId: providerId ? Number(providerId) : undefined,
+        providerServiceId: providerServiceId ? Number(providerServiceId) : undefined,
+      }),
     });
   }
 
   async downloadShipmentLabel(id: string): Promise<Blob> {
     return apiFetchBlob(`/v1/orders/${id}/shipment/label`);
+  }
+
+  async getAdminShipment(id: string): Promise<ApiAdminOrderShipment> {
+    return apiFetch<ApiAdminOrderShipment>(`/v1/orders/${id}/shipment`);
   }
 
   async getReturnRequests(status: ReturnRequestStatus): Promise<ApiOrder[]> {

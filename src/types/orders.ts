@@ -62,6 +62,19 @@ export interface ApiOrderShipment {
   createdAt: string;
 }
 
+/**
+ * `GET /orders/:id/shipment` (endpoint dedicado, no el `shipment` embebido
+ * en `ApiOrder`) — mismo shape que `ApiOrderShipment` más el detalle de
+ * costo/paquetería real que solo ve el admin, nunca el comprador.
+ */
+export interface ApiAdminOrderShipment extends ApiOrderShipment {
+  providerId: number;
+  providerServiceId: number;
+  providerServiceName?: string;
+  /** Lo que Enviatodo cobró de verdad por esta guía — no lo que pagó el comprador (`shippingTotal`, congelado desde la compra). */
+  quotedAmount?: number;
+}
+
 export interface OrderItem {
   id: string;
   productId?: string;

@@ -78,6 +78,26 @@ export interface ApiEnviatodoPackage {
 }
 
 /**
+ * `GET /orders/:id/shipment/quotes` — una cotización por paquetería/servicio
+ * habilitado en la cuenta de Enviatodo, ya ordenadas de más barata a más
+ * cara. Solo informativo para el admin: el comprador siempre paga el precio
+ * de `EXPRESS` del catálogo (`shippingTotal`), sin importar qué paquetería
+ * se elija acá. `providerId`/`providerServiceId` son los mismos valores que
+ * hay que mandar en `POST /orders/:id/shipment` para reservar esa opción.
+ */
+export interface ApiShipmentQuote {
+  providerId: string;
+  providerServiceId: string;
+  carrier: string;
+  serviceName: string;
+  viaTransport: string;
+  /** MXN, decimal — lo que Enviatodo cobraría por esta paquetería/servicio, no lo que paga el comprador. */
+  amount: number;
+  deliveryMode?: string;
+  estimatedDate?: string;
+}
+
+/**
  * `POST /shipping/packages` — el admin solo manda las dimensiones físicas;
  * `real_weight`/`volumetric_weight`/`bill_weight` los calcula el backend.
  * No existe un `PATCH` (Enviatodo no lo expone de forma confiable) — "editar"
