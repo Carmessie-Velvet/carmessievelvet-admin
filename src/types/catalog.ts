@@ -1,13 +1,23 @@
 /**
  * Shapes returned by the real Carmessie API (`carmessievelvet-api`). Color
- * is a single free-text field per product (not a variant axis) — a product
- * that comes in two colors is modeled as two separate products/SKUs.
+ * es un campo libre — a nivel producto para uno `SIMPLE` (un color por
+ * SKU, dos colores del mismo diseño son dos productos aparte), o a nivel
+ * variante dentro de cada prenda para uno `SET` (ver `ApiProductComponent`).
+ */
+export type CategoryType = "SIMPLE" | "SET";
+
+/**
+ * `type` decide la forma de **todo** producto dentro de la categoría —
+ * nunca el `name` de la categoría. `SIMPLE`: el producto manda `variants`
+ * (una talla, un color propio). `SET`: el producto se compone de 2+
+ * prendas (`components`), cada una con su propio color/stock por talla.
  */
 export interface ApiCategory {
   id: string;
   name: string;
   description?: string;
   active: boolean;
+  type: CategoryType;
 }
 
 export interface ApiTag {
@@ -22,6 +32,25 @@ export interface ApiProductVariant {
   /** Manual override — never purchasable while true, regardless of stock/madeToOrder. */
   soldOut: boolean;
   sku?: string;
+  /**
+   * Color de esta variante puntual — sólo tiene valor real dentro de
+   * `ApiProductComponent.variants` (una prenda de un set). `null`/ausente
+   * en una variante de producto `SIMPLE`, donde el color vive en
+   * `ApiProduct.color` en su lugar.
+   */
+  color?: string | null;
+}
+
+/**
+ * Una "prenda" de un producto `category.type: "SET"` (ej. "Top", "Panty")
+ * — tiene sus propias variantes talla×color y su propio stock/agotado. El
+ * precio sigue siendo uno solo, el del producto completo.
+ */
+export interface ApiProductComponent {
+  id: string;
+  name: string;
+  position: number;
+  variants: ApiProductVariant[];
 }
 
 export interface ApiAppliedDiscount {
@@ -48,8 +77,14 @@ export interface ApiProduct {
   images: string[];
   category: ApiCategory;
   tags: ApiTag[];
+  /** Vacío para un producto `category.type: "SET"` — ver `components`. */
   variants: ApiProductVariant[];
-  /** Suma de stock por talla, o `null` si el producto es sobre pedido. */
+  /** Vacío para un producto `category.type: "SIMPLE"` — ver `variants`. */
+  components: ApiProductComponent[];
+  /**
+   * Suma de stock por talla (incluye las variantes de cada prenda en un
+   * set), o `null` si el producto es sobre pedido.
+   */
   totalStock: number | null;
   finalPrice: number;
   appliedDiscount?: ApiAppliedDiscount;
@@ -69,12 +104,25 @@ export interface CreateApiProductVariant {
   stock?: number;
   /** Override manual: esta talla nunca se puede comprar mientras sea true. */
   soldOut?: boolean;
+  /** Solo tiene efecto dentro de `CreateApiProductComponent.variants` — ignorado a nivel producto. */
+  color?: string;
+}
+
+/** Una prenda al crear/editar un producto `category.type: "SET"`. */
+export interface CreateApiProductComponent {
+  name: string;
+  position?: number;
+  variants: CreateApiProductVariant[];
 }
 
 /**
  * `POST /api/v1/products` no longer accepts `images` in the body — images
  * are uploaded separately via `uploadProductImages` after creation, using
  * the created product's `sku` (not its `id`) in the URL.
+ *
+ * Manda exactamente uno de `variants`/`components`, nunca ambos ni ninguno
+ * — cuál corresponde lo decide el `type` de la categoría elegida
+ * (`categoryId`), nunca su nombre.
  */
 export interface CreateApiProductPayload {
   name: string;
@@ -82,6 +130,7 @@ export interface CreateApiProductPayload {
   price: number;
   /** Optional — the API auto-generates one (`SKU-XXXXXXXX`) if omitted. */
   sku?: string;
+  /** Ignorado (la API lo rechaza) si la categoría es `SET` — el color vive por prenda ahí. */
   color?: string;
   /**
    * Si se omite, la API lo infiere como `true` cuando ninguna variante trae
@@ -91,14 +140,18 @@ export interface CreateApiProductPayload {
   madeToOrder?: boolean;
   categoryId: string;
   tagIds?: string[];
-  variants: CreateApiProductVariant[];
+  /** Requerido y el único válido si la categoría es `SIMPLE`. */
+  variants?: CreateApiProductVariant[];
+  /** Requerido (mín. 2) y el único válido si la categoría es `SET`. */
+  components?: CreateApiProductComponent[];
 }
 
 /**
  * `PATCH /api/v1/products/:sku` — all fields optional, only sent ones are
- * changed. `variants` (like on create) replaces the full set: sizes left
- * out are soft-deleted. Images are never part of this payload — they go
- * through the separate `/products/:sku/images` endpoints below.
+ * changed. `variants`/`components` (like on create) replace the full set:
+ * sizes/prendas left out are soft-deleted. Images are never part of this
+ * payload — they go through the separate `/products/:sku/images` endpoints
+ * below.
  */
 export interface UpdateApiProductPayload {
   name?: string;
@@ -112,4 +165,24 @@ export interface UpdateApiProductPayload {
   categoryId?: string;
   tagIds?: string[];
   variants?: CreateApiProductVariant[];
+  components?: CreateApiProductComponent[];
+}
+
+/** `POST /api/v1/categories` — `type` default `SIMPLE` si se omite. */
+export interface CreateApiCategoryPayload {
+  name: string;
+  description?: string;
+  active?: boolean;
+  type?: CategoryType;
+}
+
+/**
+ * `PATCH /api/v1/categories/:id` — todos opcionales. Cambiar `type` (o
+ * `DELETE`) da `409` mientras la categoría todavía tenga productos.
+ */
+export interface UpdateApiCategoryPayload {
+  name?: string;
+  description?: string;
+  active?: boolean;
+  type?: CategoryType;
 }

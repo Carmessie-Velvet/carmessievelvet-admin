@@ -37,6 +37,13 @@ import type { ApiProduct } from "@/types/catalog";
 import { cn } from "@/lib/utils";
 
 function isFullySoldOut(product: ApiProduct): boolean {
+  // Un set no tiene variantes propias — se agota cuando toda prenda lo está.
+  if (product.category.type === "SET") {
+    return (
+      product.components.length > 0 &&
+      product.components.every((c) => c.variants.length > 0 && c.variants.every((v) => v.soldOut))
+    );
+  }
   return product.variants.length > 0 && product.variants.every((v) => v.soldOut);
 }
 

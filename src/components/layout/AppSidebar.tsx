@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Layers3,
   LayoutDashboard,
   Package,
   Percent,
@@ -31,6 +32,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/productos", label: "Productos", icon: ShoppingBag },
+  { href: "/categorias", label: "Categorías", icon: Layers3 },
   { href: "/ordenes", label: "Órdenes", icon: Package },
   { href: "/devoluciones", label: "Devoluciones", icon: Undo2 },
   { href: "/cupones", label: "Cupones", icon: Ticket },
