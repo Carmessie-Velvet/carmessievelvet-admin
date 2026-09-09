@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Package,
   Percent,
+  Settings,
   ShoppingBag,
   Tag,
   Ticket,
@@ -40,6 +41,7 @@ const navItems = [
   { href: "/tags", label: "Tags", icon: Tag },
   { href: "/metodos-envio", label: "Métodos de envío", icon: Truck },
   { href: "/envios-automatizados", label: "Envíos automatizados", icon: Warehouse },
+  { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
 export function AppSidebar() {
