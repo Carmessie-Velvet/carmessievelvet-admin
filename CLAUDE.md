@@ -247,6 +247,10 @@ Una tanda de cambios agregó wishlist, preview de cupón y rate-limiting de logi
 - **Rate limiting de login** — sí aplica directo: `POST /auth/login` ahora cuenta intentos fallidos (nunca los exitosos) y bloquea con `429` tras 5 fallos por IP o 10 por email en 15 minutos, por otros 15 minutos. `ApiError` (`api-client.ts`) ahora carga `retryAfter` (segundos) cuando el body del error lo trae, y `login/page.tsx` lo muestra en español ("Probá de nuevo en N minutos") en vez del mensaje genérico. **No se probó disparando el límite de verdad** — el bloqueo es por IP, así que hubiera tumbado el login real por 15 minutos en la instancia compartida; se verificó por build/tipos únicamente.
 - El refactor de `ProductFilterQueryDto` (filtros de catálogo compartidos entre admin/storefront/wishlist) es reorganización interna del backend — no cambia la forma de `GET /api/v1/products` que ya consume `catalogService`, no hizo falta tocar nada acá.
 
+## Favicon
+
+`src/app/icon.tsx`/`apple-icon.tsx` — el monograma "C" generado por código (`next/og`, `#4b1530` velvet de fondo), mismo diseño que `carmessievelvet-web`'s favicon — mismo motivo: el logo real solo existe como wordmark completo, ilegible a 16-32px. Reemplaza el `favicon.ico` genérico de `create-next-app` (el triángulo de Next.js) que quedó ahí desde el scaffold original y nadie había tocado.
+
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript + Tailwind CSS v4, scaffolded con `create-next-app`.
