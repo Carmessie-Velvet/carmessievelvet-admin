@@ -66,7 +66,25 @@ function valuesFromHero(hero: ApiHero): HeroFormValues {
   };
 }
 
+// The storefront doesn't derive its category slugs from the name at all —
+// `CATEGORY_OVERRIDES` in carmessievelvet-web's `product-service.ts` maps
+// the two known seed categories by hand ("Corset" -> "corsets", "Sets" ->
+// "Sets"), because the API's singular seed name ("Corset") doesn't match
+// the plural URL the site already used. A naive slugify of "Corset" gives
+// "corset" (singular) — a real link to an empty page, reported live by
+// whoever's working the web side. Mirrored here so the suggestion chip
+// actually points somewhere real for the two categories that exist today;
+// any other category falls back to the plain slugify below (same
+// best-effort caveat already noted where this is used).
+const CATEGORY_SLUG_OVERRIDES: Record<string, string> = {
+  corset: "corsets",
+  sets: "sets",
+};
+
 function slugify(name: string): string {
+  const override = CATEGORY_SLUG_OVERRIDES[name.trim().toLowerCase()];
+  if (override) return override;
+
   return name
     .toLowerCase()
     .normalize("NFD")
@@ -206,9 +224,16 @@ export function HeroEditor({ hero, categories, onChange, onDeleted }: HeroEditor
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Previsualización — mismos tonos/tipografía que el hero real de la tienda. */}
+      {/*
+        Previsualización — mismos tonos/tipografía que el hero real de la
+        tienda. El hero real no tiene una proporción fija (`h-[88svh]
+        w-full`, la altura depende del viewport de quien esté mirando) —
+        no existe una sola proporción "correcta" que calcar. `aspect-[16/10]`
+        es una aproximación razonable a un navegador de escritorio típico,
+        más cercana a lo que se ve en la práctica que el 16:9 usado antes.
+      */}
       <div
-        className="relative aspect-video w-full overflow-hidden rounded-xl bg-[#2a1f1c] [container-type:inline-size]"
+        className="relative aspect-[16/10] w-full overflow-hidden rounded-xl bg-[#2a1f1c] [container-type:inline-size]"
       >
         {hero.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -241,24 +266,37 @@ export function HeroEditor({ hero, categories, onChange, onDeleted }: HeroEditor
         </button>
 
         <div className="absolute inset-x-0 bottom-0 px-[clamp(16px,2.65cqw,40px)] pb-[clamp(24px,4.2cqw,64px)]">
-          {showTitle && (
-            <input
-              value={title}
-              onChange={(e) => form.setValue("title", e.target.value, { shouldDirty: true })}
-              placeholder="NUEVA COLECCIÓN"
-              maxLength={160}
-              className="w-full max-w-md bg-transparent text-[clamp(9px,0.79cqw,13px)] font-medium uppercase tracking-[0.3em] text-[#f8f3ec]/80 outline-none placeholder:text-white/40"
-            />
-          )}
-          {showContent && (
-            <textarea
-              value={content}
-              onChange={handleContentChange}
-              placeholder="Vestir con la textura de lo memorable."
-              rows={3}
-              className="mt-[clamp(6px,0.79cqw,12px)] w-full max-w-md resize-none overflow-hidden bg-transparent text-[clamp(22px,3.97cqw,68px)] font-black leading-[1.05] tracking-tight text-[#f8f3ec] outline-none placeholder:text-white/30"
-            />
-          )}
+          {/*
+            El hero real envuelve la etiqueta/título a un ancho fijo
+            (`max-w-md`, 448px absolutos) sin importar el viewport — en un
+            recuadro angosto como este, ese mismo ancho fijo es una
+            fracción mucho más grande del recuadro que en un navegador de
+            escritorio real, así que el texto envolvía distinto (una sola
+            línea acá, dos en el sitio real). `29.63cqw` es la misma
+            proporción (448/1512) que el resto de los tamaños de esta
+            previsualización, para que el punto de quiebre de línea caiga
+            en el mismo lugar relativo.
+          */}
+          <div className="max-w-[clamp(160px,29.63cqw,448px)]">
+            {showTitle && (
+              <input
+                value={title}
+                onChange={(e) => form.setValue("title", e.target.value, { shouldDirty: true })}
+                placeholder="NUEVA COLECCIÓN"
+                maxLength={160}
+                className="w-full bg-transparent text-[clamp(9px,0.79cqw,13px)] font-medium uppercase tracking-[0.3em] text-[#f8f3ec]/80 outline-none placeholder:text-white/40"
+              />
+            )}
+            {showContent && (
+              <textarea
+                value={content}
+                onChange={handleContentChange}
+                placeholder="Vestir con la textura de lo memorable."
+                rows={3}
+                className="mt-[clamp(6px,0.79cqw,12px)] w-full resize-none overflow-hidden bg-transparent text-[clamp(22px,3.97cqw,68px)] font-black leading-[1.05] tracking-tight text-[#f8f3ec] outline-none placeholder:text-white/30"
+              />
+            )}
+          </div>
           {showButton && (
             <div className="mt-[clamp(12px,1.85cqw,28px)]">
               <input
