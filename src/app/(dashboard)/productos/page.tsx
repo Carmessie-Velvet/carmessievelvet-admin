@@ -26,6 +26,13 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/dashboard/StatCard";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -33,7 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ApiProduct } from "@/types/catalog";
+import type { ApiCategory, ApiProduct } from "@/types/catalog";
 import { cn } from "@/lib/utils";
 
 function isFullySoldOut(product: ApiProduct): boolean {
@@ -61,17 +68,20 @@ export default function ProductsPage() {
   const router = useRouter();
   const { catalog } = useCatalogStats(router);
   const [products, setProducts] = useState<ApiProduct[] | null>(null);
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
 
-    catalogService
-      .getProducts()
-      .then((data) => {
-        if (!cancelled) setProducts(data);
+    Promise.all([catalogService.getProducts(), catalogService.getCategories()])
+      .then(([loadedProducts, loadedCategories]) => {
+        if (cancelled) return;
+        setProducts(loadedProducts);
+        setCategories(loadedCategories);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -91,9 +101,14 @@ export default function ProductsPage() {
 
   const filtered = useMemo(() => {
     if (!products) return null;
-    if (!query.trim()) return products;
-    return products.filter((product) => matchesQuery(product, query.trim()));
-  }, [products, query]);
+    return products.filter((product) => {
+      if (categoryFilter !== "ALL" && product.category.id !== categoryFilter) {
+        return false;
+      }
+      if (!query.trim()) return true;
+      return matchesQuery(product, query.trim());
+    });
+  }, [products, query, categoryFilter]);
 
   const pageCount = filtered ? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)) : 1;
   // Igual que en /ordenes: si la búsqueda deja `page` apuntando a una
@@ -148,17 +163,44 @@ export default function ProductsPage() {
       )}
 
       {products && products.length > 0 && (
-        <div className="relative max-w-sm">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
+        <div className="flex flex-wrap gap-3">
+          <div className="relative max-w-sm flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Buscar por nombre, SKU, categoría o color..."
+              className="pl-8"
+            />
+          </div>
+          <Select
+            value={categoryFilter}
+            onValueChange={(v) => {
+              setCategoryFilter(v ?? "ALL");
               setPage(1);
             }}
-            placeholder="Buscar por nombre, SKU, categoría o color..."
-            className="pl-8"
-          />
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue>
+                {(value: string) =>
+                  value === "ALL"
+                    ? "Todas las categorías"
+                    : (categories.find((c) => c.id === value)?.name ?? value)
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todas las categorías</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 
@@ -185,7 +227,11 @@ export default function ProductsPage() {
 
       {filtered && filtered.length === 0 && products && products.length > 0 && (
         <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-          Ningún producto coincide con &ldquo;{query}&rdquo;.
+          {query.trim() ? (
+            <>Ningún producto coincide con &ldquo;{query}&rdquo;.</>
+          ) : (
+            "Ningún producto coincide con el filtro."
+          )}
         </div>
       )}
 
