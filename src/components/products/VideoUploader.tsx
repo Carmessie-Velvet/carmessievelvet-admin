@@ -17,6 +17,12 @@ interface VideoUploaderProps {
  * at one file and gated by `validateProductVideoFile` before it's ever
  * accepted into form state (the API itself doesn't check duration/
  * resolution/bitrate, only container type and size).
+ *
+ * Previewed at `aspect-[2/3]` (not 16:9) — on the real PDP the video sits
+ * in the gallery's left column at the same `2:3` crop as every product
+ * image (`IMAGE_RATIO` in `carmessievelvet-web`'s `ProductGallery.tsx`),
+ * so this is what the admin should see while picking a clip, not an
+ * unrelated widescreen frame.
  */
 export function VideoUploader({ value, onChange }: VideoUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,7 +58,7 @@ export function VideoUploader({ value, onChange }: VideoUploaderProps) {
 
   if (value && previewUrl) {
     return (
-      <div className="relative aspect-video w-full max-w-sm overflow-hidden rounded-lg border border-border bg-muted">
+      <div className="relative aspect-[2/3] w-full max-w-[240px] overflow-hidden rounded-lg border border-border bg-muted">
         <video src={previewUrl} controls className="h-full w-full object-cover" />
         <button
           type="button"
@@ -73,7 +79,7 @@ export function VideoUploader({ value, onChange }: VideoUploaderProps) {
         onClick={() => inputRef.current?.click()}
         disabled={validating}
         className={cn(
-          "flex aspect-video w-full max-w-sm flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-border text-muted-foreground transition-colors hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          "flex aspect-[2/3] w-full max-w-[240px] flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-border text-muted-foreground transition-colors hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
         )}
       >
         {validating ? (
