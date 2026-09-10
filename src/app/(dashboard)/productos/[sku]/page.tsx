@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { ArrowLeft, Images, Info, Layers, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, Images, Info, Layers, Loader2, Trash2, Video } from "lucide-react";
 import type { ApiCategory, ApiProduct, ApiTag } from "@/types/catalog";
 import { catalogService } from "@/services/catalog-service";
 import { ApiError } from "@/lib/api-client";
@@ -45,6 +45,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { ExistingImagesManager } from "@/components/products/ExistingImagesManager";
+import { ExistingVideoManager } from "@/components/products/ExistingVideoManager";
 import { VariantManager } from "@/components/products/VariantManager";
 import { ComponentManager } from "@/components/products/ComponentManager";
 import { TagPicker } from "@/components/products/TagPicker";
@@ -503,7 +504,29 @@ function ProductEditForm({
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <SectionIcon icon={Layers} index={2} />
+                <SectionIcon icon={Video} index={2} />
+                <div>
+                  <CardTitle>Video</CardTitle>
+                  <CardDescription>
+                    A lo más un video por producto — subir uno nuevo reemplaza
+                    el anterior.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ExistingVideoManager
+                sku={currentSku}
+                videoUrl={product.videoUrl}
+                onChange={(videoUrl) => onProductChange({ ...product, videoUrl })}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <SectionIcon icon={Layers} index={3} />
                 <div>
                   <CardTitle>{isSet ? "Prendas del set" : "Stock por talla"}</CardTitle>
                   <CardDescription>
