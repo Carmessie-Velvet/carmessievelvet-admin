@@ -62,13 +62,51 @@ export interface ApiOrderShipment {
   createdAt: string;
 }
 
+/**
+ * `GET /orders/:id/shipment` (endpoint dedicado, no el `shipment` embebido
+ * en `ApiOrder`) — mismo shape que `ApiOrderShipment` más el detalle de
+ * costo/paquetería real que solo ve el admin, nunca el comprador.
+ */
+export interface ApiAdminOrderShipment extends ApiOrderShipment {
+  providerId: number;
+  providerServiceId: number;
+  providerServiceName?: string;
+  /** Lo que Enviatodo cobró de verdad por esta guía — no lo que pagó el comprador (`shippingTotal`, congelado desde la compra). */
+  quotedAmount?: number;
+}
+
+/**
+ * Una prenda comprada dentro de una línea de producto tipo set
+ * (`category.type: "SET"`, ver `carmessievelvet-admin`'s soporte de sets en
+ * `/productos`) — snapshot al momento de la compra, igual que
+ * `productName`/`productSku` en `OrderItem`. Solo presente en `OrderItem.selections`.
+ */
+export interface OrderItemSelection {
+  id: string;
+  componentName: string;
+  position: number;
+  size: string;
+  color?: string;
+}
+
 export interface OrderItem {
   id: string;
   productId?: string;
   productName: string;
   productSku?: string;
   productImage?: string;
-  size: string;
+  /**
+   * `null` para una línea de un producto tipo set — la talla se elige por
+   * prenda ahí, no por el producto. Ver `selections`.
+   */
+  size: string | null;
+  /**
+   * Solo presente (y no vacío) en una línea de un producto `category.type:
+   * "SET"` — una entrada por cada prenda comprada. `quantity` de la línea
+   * aplica a cada prenda por igual (comprar `quantity: 2` de un set son 2
+   * sets completos, cada uno con las mismas prendas/tallas/colores).
+   */
+  selections?: OrderItemSelection[];
   quantity: number;
   /** El producto era sobre pedido al momento de la compra. */
   madeToOrder: boolean;
@@ -93,6 +131,15 @@ export interface ApiOrder {
   shippingMethod: string;
   /** Snapshot de la descripción del método al momento de la compra. */
   shippingMethodDescription?: string;
+  /**
+   * Paquetería (ej. "Correos de México", "Estafeta") — snapshot del catálogo
+   * de métodos de envío al momento de la compra, pero un admin puede
+   * sobreescribirla para esta orden puntual vía `PATCH /orders/:id/status`
+   * (típicamente junto con `trackingNumber` al pasar a `SHIPPED` en un envío
+   * `STANDARD`, que siempre es manual). Ausente en órdenes viejas o si el
+   * método de envío nunca tuvo `carrier` configurado.
+   */
+  carrier?: string;
   total: number;
   couponCode?: string;
   items: OrderItem[];

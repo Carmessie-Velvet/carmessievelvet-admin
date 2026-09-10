@@ -43,6 +43,21 @@ export interface ApiOrderStatusStats {
   amount: number;
 }
 
+/**
+ * `GET /admin/stats/refunds` (o `dashboard.refunds`) — a diferencia de todo
+ * lo demás en este archivo, se filtra por la fecha en que el reembolso
+ * **ocurrió** (`cancelled_at`), no por creación/pago de la orden. `byStatus`
+ * siempre trae exactamente `REFUNDED` y `PARTIALLY_REFUNDED`, en ese orden,
+ * ambos presentes aunque estén en 0 — y ahí `amount` es lo realmente
+ * reembolsado (`refundedAmount`), no el total de la orden como en
+ * `ordersByStatus`.
+ */
+export interface ApiRefundStats {
+  totalRefunded: ApiMetric;
+  ordersRefunded: ApiMetric;
+  byStatus: ApiOrderStatusStats[];
+}
+
 export type StatsGranularity = "day" | "week" | "month";
 
 export interface ApiSalesBucket {
@@ -168,6 +183,7 @@ export interface ApiStatsDashboard {
   period: ApiStatsPeriod;
   summary: ApiStatsSummary;
   ordersByStatus: ApiOrderStatusStats[];
+  refunds: ApiRefundStats;
   sales: ApiSalesTimeseries;
   byState: ApiStateStats[];
   byCategory: ApiCategoryStats[];

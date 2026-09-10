@@ -4,9 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Image as ImageIcon,
+  Layers3,
   LayoutDashboard,
   Package,
   Percent,
+  Settings,
   ShoppingBag,
   Tag,
   Ticket,
@@ -30,7 +33,9 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/inicio", label: "Inicio", icon: ImageIcon },
   { href: "/productos", label: "Productos", icon: ShoppingBag },
+  { href: "/categorias", label: "Categorías", icon: Layers3 },
   { href: "/ordenes", label: "Órdenes", icon: Package },
   { href: "/devoluciones", label: "Devoluciones", icon: Undo2 },
   { href: "/cupones", label: "Cupones", icon: Ticket },
@@ -38,6 +43,7 @@ const navItems = [
   { href: "/tags", label: "Tags", icon: Tag },
   { href: "/metodos-envio", label: "Métodos de envío", icon: Truck },
   { href: "/envios-automatizados", label: "Envíos automatizados", icon: Warehouse },
+  { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
 export function AppSidebar() {

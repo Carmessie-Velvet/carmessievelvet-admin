@@ -3,14 +3,27 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Clock, Loader2, Package, PackageSearch, Search } from "lucide-react";
+import {
+  Ban,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Download,
+  Loader2,
+  Package,
+  PackageSearch,
+  Search,
+  Wallet,
+} from "lucide-react";
 import { orderService } from "@/services/order-service";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { ExportProductionDialog } from "@/components/orders/ExportProductionDialog";
 import {
   Select,
   SelectContent,
@@ -29,6 +42,8 @@ import {
 import type { ApiOrder, OrderStatus } from "@/types/orders";
 import { ORDER_STATUS_LABEL, statusBadgeVariant } from "@/types/orders";
 
+const PAGE_SIZE = 10;
+
 const STATUS_OPTIONS: OrderStatus[] = [
   "PENDING",
   "PAID",
@@ -46,6 +61,9 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
+  const [shippingMethodFilter, setShippingMethodFilter] = useState<string>("ALL");
+  const [page, setPage] = useState(1);
+  const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,10 +87,22 @@ export default function OrdersPage() {
     };
   }, [router]);
 
+  // Códigos de método de envío que existen de verdad en las órdenes ya
+  // cargadas (no un catálogo hardcodeado) — el catálogo real vive en
+  // /metodos-envio y puede crecer, así que el filtro se arma solo con lo
+  // que ya se ve en la lista, mismo criterio que el resto de esta pantalla.
+  const shippingMethodOptions = useMemo(() => {
+    if (!orders) return [];
+    return [...new Set(orders.map((o) => o.shippingMethod))].sort();
+  }, [orders]);
+
   const filtered = useMemo(() => {
     if (!orders) return null;
     return orders.filter((order) => {
       if (statusFilter !== "ALL" && order.status !== statusFilter) return false;
+      if (shippingMethodFilter !== "ALL" && order.shippingMethod !== shippingMethodFilter) {
+        return false;
+      }
       if (!query.trim()) return true;
       const q = query.trim().toLowerCase();
       return (
@@ -81,7 +111,7 @@ export default function OrdersPage() {
         order.shippingAddress.fullName.toLowerCase().includes(q)
       );
     });
-  }, [orders, query, statusFilter]);
+  }, [orders, query, statusFilter, shippingMethodFilter]);
 
   const stats = useMemo(() => {
     if (!orders) return null;
@@ -92,23 +122,39 @@ export default function OrdersPage() {
       cancelled: orders.filter((o) =>
         ["CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"].includes(o.status)
       ).length,
+      refundedAmount: orders.reduce((sum, o) => sum + o.refundedAmount, 0),
     };
   }, [orders]);
 
+  const pageCount = filtered ? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)) : 1;
+  // El filtro/búsqueda puede dejar `page` apuntando a una página que ya no
+  // existe (ej. se filtraba en la página 3 y el resultado nuevo solo tiene
+  // 1) — se ajusta acá mismo en vez de un efecto aparte.
+  const currentPage = Math.min(page, pageCount);
+  const paginated = filtered?.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Órdenes</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {orders
-            ? `${orders.length} orden${orders.length === 1 ? "" : "es"} en total.`
-            : error
-              ? "No se pudieron cargar las órdenes."
-              : "Cargando órdenes desde la API..."}
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Órdenes</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {orders
+              ? `${orders.length} orden${orders.length === 1 ? "" : "es"} en total.`
+              : error
+                ? "No se pudieron cargar las órdenes."
+                : "Cargando órdenes desde la API..."}
+          </p>
+        </div>
+        {orders && orders.length > 0 && (
+          <Button type="button" variant="outline" className="gap-1.5" onClick={() => setExportOpen(true)}>
+            <Download className="size-4" />
+            Exportar producción
+          </Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         <StatCard icon={Package} label="Total" value={stats?.total ?? null} tintIndex={0} />
         <StatCard icon={Clock} label="Pendientes" value={stats?.pending ?? null} tintIndex={1} />
         <StatCard icon={Package} label="Pagadas" value={stats?.paid ?? null} tintIndex={2} />
@@ -117,6 +163,13 @@ export default function OrdersPage() {
           label="Canceladas/reembolsadas"
           value={stats?.cancelled ?? null}
           tone={stats && stats.cancelled > 0 ? "warning" : "default"}
+        />
+        <StatCard
+          icon={Wallet}
+          label="Reembolsado"
+          value={stats?.refundedAmount ?? null}
+          money
+          tone={stats && stats.refundedAmount > 0 ? "warning" : "default"}
         />
       </div>
 
@@ -138,14 +191,20 @@ export default function OrdersPage() {
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
               placeholder="Buscar por # de orden, email o nombre..."
               className="pl-8"
             />
           </div>
           <Select
             value={statusFilter}
-            onValueChange={(v) => setStatusFilter((v as OrderStatus | "ALL") ?? "ALL")}
+            onValueChange={(v) => {
+              setStatusFilter((v as OrderStatus | "ALL") ?? "ALL");
+              setPage(1);
+            }}
           >
             <SelectTrigger className="w-44">
               <SelectValue>
@@ -159,6 +218,27 @@ export default function OrdersPage() {
               {STATUS_OPTIONS.map((status) => (
                 <SelectItem key={status} value={status}>
                   {ORDER_STATUS_LABEL[status]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={shippingMethodFilter}
+            onValueChange={(v) => {
+              setShippingMethodFilter(v ?? "ALL");
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue>
+                {(value: string) => (value === "ALL" ? "Todos los envíos" : value)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todos los envíos</SelectItem>
+              {shippingMethodOptions.map((method) => (
+                <SelectItem key={method} value={method}>
+                  {method}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -184,45 +264,92 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {filtered && filtered.length > 0 && (
-        <Card className="overflow-hidden py-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Orden</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Fecha</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((order) => (
-                <TableRow key={order.id}>
-                  <TableCell className="font-medium">
-                    <Link href={`/ordenes/${order.id}`} className="hover:underline">
-                      {order.orderNumber}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {order.shippingAddress.fullName}
-                    <div className="text-xs">{order.email}</div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusBadgeVariant(order.status)}>
-                      {ORDER_STATUS_LABEL[order.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{formatCurrency(order.total)}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {new Date(order.createdAt).toLocaleDateString("es-MX")}
-                  </TableCell>
+      {filtered && filtered.length > 0 && paginated && (
+        <>
+          <Card className="overflow-hidden py-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Orden</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Envío</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Fecha</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+              </TableHeader>
+              <TableBody>
+                {paginated.map((order) => (
+                  <TableRow key={order.id}>
+                    <TableCell className="font-medium">
+                      <Link href={`/ordenes/${order.id}`} className="hover:underline">
+                        {order.orderNumber}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {order.shippingAddress.fullName}
+                      <div className="text-xs">{order.email}</div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {order.shippingMethod}
+                      {order.shippingMethodDescription && (
+                        <div className="text-xs">{order.shippingMethodDescription}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={statusBadgeVariant(order.status)}>
+                        {ORDER_STATUS_LABEL[order.status]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{formatCurrency(order.total)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(order.createdAt).toLocaleDateString("es-MX")}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–
+                {Math.min(currentPage * PAGE_SIZE, filtered.length)} de {filtered.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  disabled={currentPage <= 1}
+                  onClick={() => setPage(currentPage - 1)}
+                >
+                  <ChevronLeft className="size-4" />
+                  Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Página {currentPage} de {pageCount}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  disabled={currentPage >= pageCount}
+                  onClick={() => setPage(currentPage + 1)}
+                >
+                  Siguiente
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
+
+      <ExportProductionDialog open={exportOpen} onOpenChange={setExportOpen} orders={orders ?? []} />
     </div>
   );
 }

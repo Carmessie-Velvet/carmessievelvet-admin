@@ -3,12 +3,24 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Layers, Loader2, PackageSearch, Pencil, PlusCircle, Search, ShoppingBag, Tags } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  Loader2,
+  PackageSearch,
+  Pencil,
+  PlusCircle,
+  Search,
+  ShoppingBag,
+  Tags,
+} from "lucide-react";
 import { catalogService } from "@/services/catalog-service";
 import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { useCatalogStats } from "@/hooks/use-catalog-stats";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -25,8 +37,17 @@ import type { ApiProduct } from "@/types/catalog";
 import { cn } from "@/lib/utils";
 
 function isFullySoldOut(product: ApiProduct): boolean {
+  // Un set no tiene variantes propias — se agota cuando toda prenda lo está.
+  if (product.category.type === "SET") {
+    return (
+      product.components.length > 0 &&
+      product.components.every((c) => c.variants.length > 0 && c.variants.every((v) => v.soldOut))
+    );
+  }
   return product.variants.length > 0 && product.variants.every((v) => v.soldOut);
 }
+
+const PAGE_SIZE = 10;
 
 function matchesQuery(product: ApiProduct, query: string): boolean {
   const haystack = [product.name, product.sku, product.category.name, product.color]
@@ -42,6 +63,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<ApiProduct[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +94,12 @@ export default function ProductsPage() {
     if (!query.trim()) return products;
     return products.filter((product) => matchesQuery(product, query.trim()));
   }, [products, query]);
+
+  const pageCount = filtered ? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)) : 1;
+  // Igual que en /ordenes: si la búsqueda deja `page` apuntando a una
+  // página que ya no existe, se ajusta acá mismo en vez de un efecto aparte.
+  const currentPage = Math.min(page, pageCount);
+  const paginated = filtered?.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="flex flex-col gap-6">
@@ -124,7 +152,10 @@ export default function ProductsPage() {
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
             placeholder="Buscar por nombre, SKU, categoría o color..."
             className="pl-8"
           />
@@ -158,84 +189,122 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {filtered && filtered.length > 0 && (
-        <Card className="overflow-hidden py-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-14"></TableHead>
-                <TableHead>Producto</TableHead>
-                <TableHead>Categoría</TableHead>
-                <TableHead>Color</TableHead>
-                <TableHead>Precio</TableHead>
-                <TableHead>Stock</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="w-10"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell>
-                    <div className="relative size-10 overflow-hidden rounded-md bg-muted">
-                      {product.images[0] && (
-                        // Real product images can come from any host (the API's
-                        // own dummy placeholder is via.placeholder.com), so a
-                        // plain <img> avoids next/image's remotePatterns
-                        // allowlist entirely instead of crashing on unlisted
-                        // hosts.
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={product.images[0]}
-                          alt={product.name}
-                          className="h-full w-full object-cover"
-                        />
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {product.name}
-                    <div className="text-xs font-normal text-muted-foreground">
-                      {product.sku}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {product.category.name}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {product.color ?? "—"}
-                  </TableCell>
-                  <TableCell>{formatCurrency(product.finalPrice)}</TableCell>
-                  <TableCell>
-                    {isFullySoldOut(product) ? (
-                      <Badge variant="destructive">Agotado</Badge>
-                    ) : product.madeToOrder ? (
-                      <Badge variant="secondary">Sobre pedido</Badge>
-                    ) : product.totalStock === 0 ? (
-                      <Badge variant="destructive">Agotado</Badge>
-                    ) : (
-                      product.totalStock
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={product.active ? "default" : "secondary"}>
-                      {product.active ? "Activo" : "Inactivo"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/productos/${product.sku}`}
-                      aria-label={`Editar ${product.name}`}
-                      className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
-                    >
-                      <Pencil className="size-3.5" />
-                    </Link>
-                  </TableCell>
+      {filtered && filtered.length > 0 && paginated && (
+        <>
+          <Card className="overflow-hidden py-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-14"></TableHead>
+                  <TableHead>Producto</TableHead>
+                  <TableHead>Categoría</TableHead>
+                  <TableHead>Color</TableHead>
+                  <TableHead>Precio</TableHead>
+                  <TableHead>Stock</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="w-10"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+              </TableHeader>
+              <TableBody>
+                {paginated.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell>
+                      <div className="relative size-10 overflow-hidden rounded-md bg-muted">
+                        {product.images[0] && (
+                          // Real product images can come from any host (the API's
+                          // own dummy placeholder is via.placeholder.com), so a
+                          // plain <img> avoids next/image's remotePatterns
+                          // allowlist entirely instead of crashing on unlisted
+                          // hosts.
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={product.images[0]}
+                            alt={product.name}
+                            className="h-full w-full object-cover"
+                          />
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {product.name}
+                      <div className="text-xs font-normal text-muted-foreground">
+                        {product.sku}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {product.category.name}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {product.color ?? "—"}
+                    </TableCell>
+                    <TableCell>{formatCurrency(product.finalPrice)}</TableCell>
+                    <TableCell>
+                      {isFullySoldOut(product) ? (
+                        <Badge variant="destructive">Agotado</Badge>
+                      ) : product.madeToOrder ? (
+                        <Badge variant="secondary">Sobre pedido</Badge>
+                      ) : product.totalStock === 0 ? (
+                        <Badge variant="destructive">Agotado</Badge>
+                      ) : (
+                        product.totalStock
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={product.active ? "default" : "secondary"}>
+                        {product.active ? "Activo" : "Inactivo"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/productos/${product.sku}`}
+                        aria-label={`Editar ${product.name}`}
+                        className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
+                      >
+                        <Pencil className="size-3.5" />
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {(currentPage - 1) * PAGE_SIZE + 1}–
+                {Math.min(currentPage * PAGE_SIZE, filtered.length)} de {filtered.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  disabled={currentPage <= 1}
+                  onClick={() => setPage(currentPage - 1)}
+                >
+                  <ChevronLeft className="size-4" />
+                  Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Página {currentPage} de {pageCount}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  disabled={currentPage >= pageCount}
+                  onClick={() => setPage(currentPage + 1)}
+                >
+                  Siguiente
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

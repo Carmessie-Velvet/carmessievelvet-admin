@@ -18,6 +18,11 @@ interface ExistingImagesManagerProps {
  * submit), every action here calls the API immediately — reorder/delete/
  * upload are their own endpoints on an already-created product, there's
  * no "pending" state to submit later.
+ *
+ * `aspect-[2/3]` — mismo recorte que la ficha de producto real
+ * (`IMAGE_RATIO` en `carmessievelvet-web`'s `ProductGallery.tsx`), no un
+ * cuadrado genérico. Pedido explícito: el admin quiere ver, mientras
+ * administra las fotos, cómo se van a ver realmente en la tienda.
  */
 export function ExistingImagesManager({
   sku,
@@ -82,7 +87,7 @@ export function ExistingImagesManager({
       {images.map((url, index) => (
         <div
           key={url}
-          className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-muted"
+          className="group relative aspect-[2/3] overflow-hidden rounded-lg border border-border bg-muted"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={url} alt={`Imagen ${index + 1}`} className="h-full w-full object-cover" />
@@ -137,7 +142,7 @@ export function ExistingImagesManager({
         onClick={() => inputRef.current?.click()}
         disabled={busy !== null}
         className={cn(
-          "flex aspect-square flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+          "flex aspect-[2/3] flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
           "border-border"
         )}
       >

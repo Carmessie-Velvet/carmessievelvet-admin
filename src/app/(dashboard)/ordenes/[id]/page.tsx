@@ -12,6 +12,7 @@ import {
   MapPin,
   Package,
   Receipt,
+  RefreshCw,
   Truck,
   Undo2,
 } from "lucide-react";
@@ -29,9 +30,10 @@ import {
   REFUND_MODE_LABEL,
   RETURN_REQUEST_STATUS_LABEL,
   statusBadgeVariant,
+  type ApiAdminOrderShipment,
   type ApiOrder,
 } from "@/types/orders";
-import type { ApiEnviatodoPackage } from "@/types/shipping";
+import type { ApiEnviatodoPackage, ApiShipmentQuote } from "@/types/shipping";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,6 +134,7 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [trackingNumber, setTrackingNumber] = useState("");
+  const [carrier, setCarrier] = useState("");
   const [busy, setBusy] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [approveReturnDialogOpen, setApproveReturnDialogOpen] = useState(false);
@@ -140,6 +143,11 @@ export default function OrderDetailPage() {
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const [shipmentBusy, setShipmentBusy] = useState(false);
   const [labelBusy, setLabelBusy] = useState(false);
+
+  const [quotes, setQuotes] = useState<ApiShipmentQuote[] | null>(null);
+  const [quotesLoading, setQuotesLoading] = useState(false);
+  const [selectedQuote, setSelectedQuote] = useState<ApiShipmentQuote | null>(null);
+  const [adminShipment, setAdminShipment] = useState<ApiAdminOrderShipment | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +158,7 @@ export default function OrderDetailPage() {
         if (!cancelled) {
           setOrder(data);
           setTrackingNumber(data.trackingNumber ?? "");
+          setCarrier(data.carrier ?? "");
         }
       })
       .catch((err: unknown) => {
@@ -197,15 +206,59 @@ export default function OrderDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id, order?.status, order?.shipment]);
 
+  useEffect(() => {
+    if (!order?.shipment) return;
+
+    let cancelled = false;
+    orderService
+      .getAdminShipment(order.id)
+      .then((data) => {
+        if (!cancelled) setAdminShipment(data);
+      })
+      .catch(() => {
+        // No es crítico — la card ya muestra lo básico desde order.shipment.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [order?.id, order?.shipment]);
+
+  async function fetchQuotes() {
+    if (!order) return;
+
+    setQuotesLoading(true);
+    setQuotes(null);
+    setSelectedQuote(null);
+    try {
+      const data = await orderService.quoteShipment(order.id, selectedPackageId || undefined);
+      setQuotes(data);
+      if (data.length === 0) {
+        toast.warning("Ninguna paquetería respondió con cotización — puede ser algo pasajero.");
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudieron cotizar las paqueterías.");
+    } finally {
+      setQuotesLoading(false);
+    }
+  }
+
   async function generateShipment() {
     if (!order) return;
 
     setShipmentBusy(true);
     try {
-      await orderService.createShipment(order.id, selectedPackageId || undefined);
+      await orderService.createShipment(
+        order.id,
+        selectedPackageId || undefined,
+        selectedQuote?.providerId,
+        selectedQuote?.providerServiceId
+      );
       const refreshed = await orderService.getOrder(order.id);
       setOrder(refreshed);
       setTrackingNumber(refreshed.trackingNumber ?? "");
+      setQuotes(null);
+      setSelectedQuote(null);
       toast.success("Guía generada correctamente.");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo generar la guía.");
@@ -243,9 +296,11 @@ export default function OrderDetailPage() {
       const updated = await orderService.updateOrderStatus(
         order.id,
         next,
-        next === "SHIPPED" ? trackingNumber || undefined : undefined
+        next === "SHIPPED" ? trackingNumber || undefined : undefined,
+        next === "SHIPPED" ? carrier || undefined : undefined
       );
       setOrder(updated);
+      setCarrier(updated.carrier ?? "");
       toast.success(`Orden marcada como ${ORDER_STATUS_LABEL[next]}.`);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo actualizar el estado.");
@@ -372,12 +427,20 @@ export default function OrderDetailPage() {
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           {showManualAdvance && next === "SHIPPED" && (
-            <Input
-              value={trackingNumber}
-              onChange={(e) => setTrackingNumber(e.target.value)}
-              placeholder="Número de rastreo (opcional)"
-              className="max-w-56"
-            />
+            <>
+              <Input
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                placeholder="Número de rastreo (opcional)"
+                className="max-w-56"
+              />
+              <Input
+                value={carrier}
+                onChange={(e) => setCarrier(e.target.value)}
+                placeholder="Paquetería (ej. Correos de México)"
+                className="max-w-56"
+              />
+            </>
           )}
           {showManualAdvance && next && (
             <Button type="button" disabled={busy} onClick={advanceStatus}>
@@ -414,6 +477,7 @@ export default function OrderDetailPage() {
           {order.trackingNumber && (
             <p className="w-full text-sm text-muted-foreground">
               Rastreo: <span className="font-medium text-foreground">{order.trackingNumber}</span>
+              {order.carrier ? ` (${order.carrier})` : ""}
             </p>
           )}
           {order.cancellationReason && (
@@ -462,6 +526,11 @@ export default function OrderDetailPage() {
             Envío: <span className="font-medium text-foreground">{order.shippingMethod}</span>
             {order.shippingMethodDescription ? ` — ${order.shippingMethodDescription}` : ""}
           </p>
+          {order.carrier && (
+            <p className="text-muted-foreground sm:col-span-2">
+              Paquetería: <span className="font-medium text-foreground">{order.carrier}</span>
+            </p>
+          )}
           {order.notes && (
             <p className="mt-2 text-muted-foreground sm:col-span-2">Notas: {order.notes}</p>
           )}
@@ -494,6 +563,16 @@ export default function OrderDetailPage() {
                     Guía: <span className="font-medium text-foreground">{order.shipment.trackingId}</span>
                   </p>
                 )}
+                {adminShipment?.providerServiceName && (
+                  <p className="text-muted-foreground">
+                    Servicio: <span className="font-medium text-foreground">{adminShipment.providerServiceName}</span>
+                  </p>
+                )}
+                {adminShipment?.quotedAmount !== undefined && (
+                  <p className="text-muted-foreground">
+                    Costo real: <span className="font-medium text-foreground">{formatCurrency(adminShipment.quotedAmount)}</span>
+                  </p>
+                )}
                 <p className="text-muted-foreground sm:col-span-2">
                   Estatus de la paquetería:{" "}
                   {order.shipment.carrierStatus ? (
@@ -522,30 +601,108 @@ export default function OrderDetailPage() {
               no se genera guía automática.
             </p>
           ) : SHIPMENT_ELIGIBLE_STATUSES.includes(order.status) ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <Select
-                value={selectedPackageId || null}
-                onValueChange={(v) => setSelectedPackageId(v ?? "")}
-              >
-                <SelectTrigger className="w-full sm:w-80">
-                  <SelectValue placeholder="Selecciona un paquete">
-                    {(id: string) => {
-                      const pkg = packages?.find((p) => p.id === id);
-                      return pkg ? packageLabel(pkg) : "Selecciona un paquete";
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {(packages ?? []).map((pkg) => (
-                    <SelectItem key={pkg.id} value={pkg.id ?? ""}>
-                      {packageLabel(pkg)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button type="button" disabled={shipmentBusy || !packages} onClick={generateShipment}>
-                {shipmentBusy ? "Generando..." : "Generar guía"}
-              </Button>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Select
+                  value={selectedPackageId || null}
+                  onValueChange={(v) => {
+                    setSelectedPackageId(v ?? "");
+                    setQuotes(null);
+                    setSelectedQuote(null);
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-80">
+                    <SelectValue placeholder="Selecciona un paquete">
+                      {(id: string) => {
+                        const pkg = packages?.find((p) => p.id === id);
+                        return pkg ? packageLabel(pkg) : "Selecciona un paquete";
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(packages ?? []).map((pkg) => (
+                      <SelectItem key={pkg.id} value={pkg.id ?? ""}>
+                        {packageLabel(pkg)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={quotesLoading || !packages}
+                  onClick={fetchQuotes}
+                >
+                  <RefreshCw className={cn("size-4", quotesLoading && "animate-spin")} />
+                  {quotesLoading ? "Cotizando..." : quotes ? "Volver a cotizar" : "Cotizar paqueterías"}
+                </Button>
+              </div>
+
+              {quotes && quotes.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Cotizado con {quotes.length} paquetería{quotes.length === 1 ? "" : "s"}, de más barata a más cara — el comprador ya pagó el envío al momento de la compra, esto es solo lo que cobraría Enviatodo.
+                  </p>
+                  {quotes.map((quote) => {
+                    const isSelected =
+                      selectedQuote?.providerId === quote.providerId &&
+                      selectedQuote?.providerServiceId === quote.providerServiceId;
+                    return (
+                      <button
+                        key={`${quote.providerId}-${quote.providerServiceId}`}
+                        type="button"
+                        onClick={() => setSelectedQuote(quote)}
+                        className={cn(
+                          "flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                          isSelected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                        )}
+                      >
+                        <div>
+                          <p className="font-medium">
+                            {quote.carrier} — {quote.serviceName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {quote.viaTransport}
+                            {quote.estimatedDate &&
+                              ` · Estimado: ${new Date(quote.estimatedDate).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}`}
+                          </p>
+                        </div>
+                        <span className="shrink-0 font-semibold">{formatCurrency(quote.amount)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {quotes === null && (
+                <p className="text-sm text-muted-foreground">
+                  Cotiza primero para poder elegir la paquetería — la guía no se genera sin
+                  comparar opciones antes.
+                </p>
+              )}
+
+              {quotes && quotes.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Ninguna paquetería respondió con cotización en este momento — puedes generar la
+                  guía con la paquetería predeterminada o volver a cotizar.
+                </p>
+              )}
+
+              {quotes !== null && (
+                <Button
+                  type="button"
+                  disabled={shipmentBusy || !packages || (quotes.length > 0 && !selectedQuote)}
+                  className="w-fit"
+                  onClick={generateShipment}
+                >
+                  {shipmentBusy
+                    ? "Generando..."
+                    : selectedQuote
+                      ? `Generar guía con ${selectedQuote.carrier} (${formatCurrency(selectedQuote.amount)})`
+                      : "Generar guía (paquetería predeterminada)"}
+                </Button>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
@@ -663,7 +820,20 @@ export default function OrderDetailPage() {
                         {item.productSku}
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{item.size}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {item.selections && item.selections.length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          {item.selections.map((selection) => (
+                            <span key={selection.id} className="text-xs whitespace-nowrap">
+                              {selection.componentName}: {selection.size}
+                              {selection.color ? ` (${selection.color})` : ""}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        item.size
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{item.quantity}</TableCell>
                     <TableCell>{formatCurrency(item.unitFinalPrice)}</TableCell>
                     <TableCell>{formatCurrency(item.lineTotal)}</TableCell>

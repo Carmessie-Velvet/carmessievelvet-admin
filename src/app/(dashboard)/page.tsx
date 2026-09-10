@@ -590,6 +590,53 @@ export default function DashboardPage() {
             </Card>
           </Link>
 
+          <Link href="/ordenes" className="block">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <SectionIcon icon={Undo2} index={1} />
+                  <div>
+                    <CardTitle>Reembolsos</CardTitle>
+                    <CardDescription>Fecha en que ocurrió el reembolso.</CardDescription>
+                  </div>
+                </div>
+                <CardLinkChevron />
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg bg-destructive/10 px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-destructive">Total reembolsado</p>
+                      <ChangeBadge changePct={dashboard.refunds.totalRefunded.changePct} />
+                    </div>
+                    <p className="text-2xl font-extrabold tracking-tight text-destructive tabular-nums">
+                      {formatCurrency(dashboard.refunds.totalRefunded.value)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-muted px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-muted-foreground">Órdenes reembolsadas</p>
+                      <ChangeBadge changePct={dashboard.refunds.ordersRefunded.changePct} />
+                    </div>
+                    <p className="text-2xl font-extrabold tracking-tight tabular-nums">
+                      {dashboard.refunds.ordersRefunded.value}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {dashboard.refunds.byStatus.map((s) => (
+                    <div key={s.status}>
+                      <p className="text-xs text-muted-foreground">{s.label}</p>
+                      <p className="text-lg font-semibold">
+                        {s.orders} · {formatCurrency(s.amount)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card className="h-full">
               <CardHeader>

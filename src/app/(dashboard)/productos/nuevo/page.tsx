@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Images, Info, Layers } from "lucide-react";
+import { Images, Info, Layers, Video } from "lucide-react";
 import type { ApiCategory, ApiTag } from "@/types/catalog";
 import { catalogService } from "@/services/catalog-service";
 import { ApiError } from "@/lib/api-client";
 import { commonSizes } from "@/mocks/sizes";
+import { cn } from "@/lib/utils";
 import {
   defaultProductFormValues,
   productFormSchema,
@@ -44,7 +45,9 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { ImageUploader } from "@/components/products/ImageUploader";
+import { VideoUploader } from "@/components/products/VideoUploader";
 import { VariantManager } from "@/components/products/VariantManager";
+import { ComponentManager } from "@/components/products/ComponentManager";
 import { TagPicker } from "@/components/products/TagPicker";
 
 export default function NewProductPage() {
@@ -68,8 +71,16 @@ export default function NewProductPage() {
   });
 
   const madeToOrder = useWatch({ control: form.control, name: "madeToOrder" });
+  const categoryId = useWatch({ control: form.control, name: "categoryId" });
+  const selectedCategory = categories.find((c) => c.id === categoryId);
+  const isSet = selectedCategory?.type === "SET";
 
   async function onSubmit(values: ProductFormValues) {
+    if (isSet && values.components.length < 2) {
+      toast.error("Un set necesita al menos 2 prendas.");
+      return;
+    }
+
     try {
       const created = await catalogService.createProduct({
         name: values.name,
@@ -77,14 +88,18 @@ export default function NewProductPage() {
         price: values.price,
         categoryId: values.categoryId,
         sku: values.sku || undefined,
-        color: values.color || undefined,
         madeToOrder: values.madeToOrder,
         tagIds: values.tagIds,
-        variants: values.variants,
+        ...(isSet
+          ? { components: values.components }
+          : { color: values.color || undefined, variants: values.variants }),
       });
 
       if (values.images.length > 0) {
         await catalogService.uploadProductImages(created.sku, values.images);
+      }
+      if (values.video) {
+        await catalogService.uploadProductVideo(created.sku, values.video);
       }
 
       toast.success(`"${created.name}" se creó correctamente.`);
@@ -208,20 +223,22 @@ export default function NewProductPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="color"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Color</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ej. Negro" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <div className={cn("grid grid-cols-1 gap-4", !isSet && "sm:grid-cols-2")}>
+                {!isSet && (
+                  <FormField
+                    control={form.control}
+                    name="color"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Color</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej. Negro" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <FormField
                   control={form.control}
@@ -300,12 +317,40 @@ export default function NewProductPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <SectionIcon icon={Layers} index={2} />
+                <SectionIcon icon={Video} index={2} />
                 <div>
-                  <CardTitle>Stock por talla</CardTitle>
+                  <CardTitle>Video</CardTitle>
                   <CardDescription>
-                    Cuánto stock hay disponible en cada talla, o márcalo como
-                    sobre pedido para venderlo sin inventario.
+                    A lo más un video por producto — subirlo reemplaza el
+                    anterior.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <FormField
+                control={form.control}
+                name="video"
+                render={({ field }) => (
+                  <FormItem>
+                    <VideoUploader value={field.value} onChange={field.onChange} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <SectionIcon icon={Layers} index={3} />
+                <div>
+                  <CardTitle>{isSet ? "Prendas del set" : "Stock por talla"}</CardTitle>
+                  <CardDescription>
+                    {isSet
+                      ? "Cada prenda tiene su propio color y stock por talla — el comprador elige por prenda, no por el producto."
+                      : "Cuánto stock hay disponible en cada talla, o márcalo como sobre pedido para venderlo sin inventario."}
                   </CardDescription>
                 </div>
               </div>
@@ -332,21 +377,39 @@ export default function NewProductPage() {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="variants"
-                render={({ field }) => (
-                  <FormItem>
-                    <VariantManager
-                      value={field.value}
-                      onChange={field.onChange}
-                      sizes={commonSizes}
-                      madeToOrder={madeToOrder}
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {isSet ? (
+                <FormField
+                  control={form.control}
+                  name="components"
+                  render={({ field }) => (
+                    <FormItem>
+                      <ComponentManager
+                        value={field.value}
+                        onChange={field.onChange}
+                        sizes={commonSizes}
+                        madeToOrder={madeToOrder}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : (
+                <FormField
+                  control={form.control}
+                  name="variants"
+                  render={({ field }) => (
+                    <FormItem>
+                      <VariantManager
+                        value={field.value}
+                        onChange={field.onChange}
+                        sizes={commonSizes}
+                        madeToOrder={madeToOrder}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </CardContent>
           </Card>
 
