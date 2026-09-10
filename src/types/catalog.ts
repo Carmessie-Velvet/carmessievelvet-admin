@@ -75,6 +75,8 @@ export interface ApiProduct {
    */
   madeToOrder: boolean;
   images: string[];
+  /** A lo más un video por producto — `null` si no tiene. Ver `uploadProductVideo`/`deleteProductVideo`. */
+  videoUrl: string | null;
   category: ApiCategory;
   tags: ApiTag[];
   /** Vacío para un producto `category.type: "SET"` — ver `components`. */
