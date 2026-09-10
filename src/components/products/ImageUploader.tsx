@@ -9,6 +9,10 @@ interface ImageUploaderProps {
   onChange: (files: File[]) => void;
 }
 
+// `aspect-[2/3]` — mismo recorte que la ficha de producto real
+// (`IMAGE_RATIO` en `carmessievelvet-web`'s `ProductGallery.tsx`), no un
+// cuadrado genérico. Pedido explícito: el admin quiere ver, mientras elige
+// las fotos, cómo se van a ver realmente en la tienda, no una aproximación.
 export function ImageUploader({ value, onChange }: ImageUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -42,7 +46,7 @@ export function ImageUploader({ value, onChange }: ImageUploaderProps) {
       {previews.map((preview, index) => (
         <div
           key={`${preview.file.name}-${preview.file.lastModified}-${index}`}
-          className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-muted"
+          className="group relative aspect-[2/3] overflow-hidden rounded-lg border border-border bg-muted"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -80,7 +84,7 @@ export function ImageUploader({ value, onChange }: ImageUploaderProps) {
           addFiles(e.dataTransfer.files);
         }}
         className={cn(
-          "flex aspect-square flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-ring hover:text-foreground",
+          "flex aspect-[2/3] flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-ring hover:text-foreground",
           isDragging ? "border-ring bg-muted text-foreground" : "border-border"
         )}
       >

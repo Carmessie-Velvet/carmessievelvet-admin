@@ -19,6 +19,10 @@ interface ExistingVideoManagerProps {
  * immediately (upload always replaces the current video, there's only ever
  * one). The candidate file is validated client-side (`validateProductVideoFile`)
  * before it's ever sent, same gate as the create-form's `VideoUploader`.
+ *
+ * Previewed at `aspect-[2/3]` (not 16:9) — same reasoning as
+ * `VideoUploader`: the real PDP shows the video at the same `2:3` crop as
+ * every product image, not a widescreen frame.
  */
 export function ExistingVideoManager({
   sku,
@@ -69,7 +73,7 @@ export function ExistingVideoManager({
 
   if (videoUrl) {
     return (
-      <div className="relative aspect-video w-full max-w-sm overflow-hidden rounded-lg border border-border bg-muted">
+      <div className="relative aspect-[2/3] w-full max-w-[240px] overflow-hidden rounded-lg border border-border bg-muted">
         <video src={videoUrl} controls className="h-full w-full object-cover" />
         {busy === "delete" ? (
           <div className="absolute inset-0 flex items-center justify-center bg-background/70">
@@ -97,7 +101,7 @@ export function ExistingVideoManager({
         onClick={() => inputRef.current?.click()}
         disabled={busy !== null}
         className={cn(
-          "flex aspect-video w-full max-w-sm flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-border text-muted-foreground transition-colors hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          "flex aspect-[2/3] w-full max-w-[240px] flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-border text-muted-foreground transition-colors hover:border-ring hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
         )}
       >
         {busy !== null ? (
