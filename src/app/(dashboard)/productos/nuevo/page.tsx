@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Images, Info, Layers } from "lucide-react";
+import { Images, Info, Layers, Video } from "lucide-react";
 import type { ApiCategory, ApiTag } from "@/types/catalog";
 import { catalogService } from "@/services/catalog-service";
 import { ApiError } from "@/lib/api-client";
@@ -45,6 +45,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { ImageUploader } from "@/components/products/ImageUploader";
+import { VideoUploader } from "@/components/products/VideoUploader";
 import { VariantManager } from "@/components/products/VariantManager";
 import { ComponentManager } from "@/components/products/ComponentManager";
 import { TagPicker } from "@/components/products/TagPicker";
@@ -96,6 +97,9 @@ export default function NewProductPage() {
 
       if (values.images.length > 0) {
         await catalogService.uploadProductImages(created.sku, values.images);
+      }
+      if (values.video) {
+        await catalogService.uploadProductVideo(created.sku, values.video);
       }
 
       toast.success(`"${created.name}" se creó correctamente.`);
@@ -313,7 +317,34 @@ export default function NewProductPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <SectionIcon icon={Layers} index={2} />
+                <SectionIcon icon={Video} index={2} />
+                <div>
+                  <CardTitle>Video</CardTitle>
+                  <CardDescription>
+                    A lo más un video por producto — subirlo reemplaza el
+                    anterior.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <FormField
+                control={form.control}
+                name="video"
+                render={({ field }) => (
+                  <FormItem>
+                    <VideoUploader value={field.value} onChange={field.onChange} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <SectionIcon icon={Layers} index={3} />
                 <div>
                   <CardTitle>{isSet ? "Prendas del set" : "Stock por talla"}</CardTitle>
                   <CardDescription>
