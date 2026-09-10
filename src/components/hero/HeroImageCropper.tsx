@@ -12,8 +12,21 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-const OUTPUT_WIDTH = 1920;
-const OUTPUT_HEIGHT = 1080; // 16:9 — mismo mínimo que exige la API para el hero.
+// 3840×2160 (4K), no 1920×1080 — 1920 es el MÍNIMO que exige la API para
+// validar la imagen, no una resolución de buena calidad para mostrarla.
+// Reportado en vivo (2026-09-10): un hero exportado a 1920 se veía nítido
+// en esta previsualización (recuadro angosto) pero pixeleado en la web
+// real, donde la imagen se estira a todo el ancho de la pantalla — en un
+// monitor Retina/HiDPI (2-3x densidad de píxeles) eso necesita bastante
+// más que 1920px físicos para verse nítida. `next/image` (`sizes="100vw"`
+// en `carmessievelvet-web`) nunca puede inventar detalle que no exista en
+// el archivo original, solo puede downscalear. Subir el objetivo a 4K
+// sigue muy por debajo del límite de 5MB del backend (una imagen 1920×1080
+// típica de este flujo pesa ~270KB; 4x los píxeles no multiplica el peso
+// 4x en JPEG) — verificado con `handleConfirm`'s reintento a menor calidad
+// abajo, por si acaso.
+const OUTPUT_WIDTH = 3840;
+const OUTPUT_HEIGHT = 2160;
 const MAX_ZOOM = 3;
 
 type Offset = { x: number; y: number };
@@ -188,9 +201,18 @@ export function HeroImageCropper({ file, onCancel, onConfirm }: HeroImageCropper
       OUTPUT_HEIGHT
     );
 
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.92)
-    );
+    // A 4K canvas is comfortably under the API's 5MB image cap for a
+    // typical photo, but "typical" isn't guaranteed — if a particularly
+    // detailed/noisy source pushes the JPEG past a safe margin, retry once
+    // at a lower quality instead of letting the upload fail on something
+    // the admin has no way to diagnose.
+    const toBlob = (quality: number) =>
+      new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+
+    let blob = await toBlob(0.92);
+    if (blob && blob.size > 4.5 * 1024 * 1024) {
+      blob = await toBlob(0.75);
+    }
     if (!blob) return;
 
     const croppedFile = new File(
