@@ -32,6 +32,8 @@ export interface CatalogService {
   uploadProductImages(sku: string, files: File[]): Promise<string[]>;
   reorderProductImages(sku: string, images: string[]): Promise<string[]>;
   deleteProductImage(sku: string, url: string): Promise<string[]>;
+  uploadProductVideo(sku: string, file: File): Promise<string | null>;
+  deleteProductVideo(sku: string): Promise<string | null>;
   deleteProduct(sku: string): Promise<boolean>;
   getTags(): Promise<ApiTag[]>;
   createTag(name: string): Promise<ApiTag>;
@@ -120,6 +122,25 @@ export class RestCatalogService implements CatalogService {
       { method: "DELETE" }
     );
     return result.images;
+  }
+
+  async uploadProductVideo(sku: string, file: File): Promise<string | null> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const result = await apiFetch<{ productId: string; videoUrl: string | null }>(
+      `/v1/products/${sku}/video`,
+      { method: "POST", body: formData }
+    );
+    return result.videoUrl;
+  }
+
+  async deleteProductVideo(sku: string): Promise<string | null> {
+    const result = await apiFetch<{ productId: string; videoUrl: string | null }>(
+      `/v1/products/${sku}/video`,
+      { method: "DELETE" }
+    );
+    return result.videoUrl;
   }
 
   async deleteProduct(sku: string): Promise<boolean> {

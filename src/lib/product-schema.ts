@@ -63,6 +63,8 @@ const productFieldsSchema = z.object({
 
 export const productFormSchema = productFieldsSchema.extend({
   images: z.array(z.instanceof(File)).min(1, "Agrega al menos una imagen"),
+  /** Opcional — a lo más un video por producto, ya validado (formato/duración/resolución/bitrate) antes de llegar aquí. */
+  video: z.instanceof(File).nullable(),
 });
 
 export type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -80,6 +82,7 @@ export const defaultProductFormValues: ProductFormValues = {
   madeToOrder: true,
   tagIds: [],
   images: [],
+  video: null,
   variants: commonSizes.map((size) => ({ size, stock: 0, soldOut: false })),
   components: [],
 };
