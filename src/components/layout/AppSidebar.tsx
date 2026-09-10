@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Image as ImageIcon,
   Layers3,
   LayoutDashboard,
   Package,
@@ -31,6 +32,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/inicio", label: "Inicio", icon: ImageIcon },
   { href: "/productos", label: "Productos", icon: ShoppingBag },
   { href: "/categorias", label: "Categorías", icon: Layers3 },
   { href: "/ordenes", label: "Órdenes", icon: Package },
