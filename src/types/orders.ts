@@ -75,13 +75,38 @@ export interface ApiAdminOrderShipment extends ApiOrderShipment {
   quotedAmount?: number;
 }
 
+/**
+ * Una prenda comprada dentro de una línea de producto tipo set
+ * (`category.type: "SET"`, ver `carmessievelvet-admin`'s soporte de sets en
+ * `/productos`) — snapshot al momento de la compra, igual que
+ * `productName`/`productSku` en `OrderItem`. Solo presente en `OrderItem.selections`.
+ */
+export interface OrderItemSelection {
+  id: string;
+  componentName: string;
+  position: number;
+  size: string;
+  color?: string;
+}
+
 export interface OrderItem {
   id: string;
   productId?: string;
   productName: string;
   productSku?: string;
   productImage?: string;
-  size: string;
+  /**
+   * `null` para una línea de un producto tipo set — la talla se elige por
+   * prenda ahí, no por el producto. Ver `selections`.
+   */
+  size: string | null;
+  /**
+   * Solo presente (y no vacío) en una línea de un producto `category.type:
+   * "SET"` — una entrada por cada prenda comprada. `quantity` de la línea
+   * aplica a cada prenda por igual (comprar `quantity: 2` de un set son 2
+   * sets completos, cada uno con las mismas prendas/tallas/colores).
+   */
+  selections?: OrderItemSelection[];
   quantity: number;
   /** El producto era sobre pedido al momento de la compra. */
   madeToOrder: boolean;
