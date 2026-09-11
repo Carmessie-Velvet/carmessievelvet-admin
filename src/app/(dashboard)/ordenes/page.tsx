@@ -7,7 +7,6 @@ import {
   Ban,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Download,
   Loader2,
   Package,
@@ -44,8 +43,9 @@ import { ORDER_STATUS_LABEL, statusBadgeVariant } from "@/types/orders";
 
 const PAGE_SIZE = 10;
 
+// Sin "PENDING" — son órdenes que nunca se pagaron (carrito abandonado en
+// checkout) y no le interesan al admin en esta lista, ver `visibleOrders`.
 const STATUS_OPTIONS: OrderStatus[] = [
-  "PENDING",
   "PAID",
   "PROCESSING",
   "SHIPPED",
@@ -87,18 +87,26 @@ export default function OrdersPage() {
     };
   }, [router]);
 
+  // "PENDING" = nunca se pagó (carrito abandonado en checkout) — no es una
+  // orden real todavía, así que se excluye de esta pantalla por completo
+  // (filtro, tabla, stats), no solo se le quita del dropdown.
+  const visibleOrders = useMemo(
+    () => orders?.filter((o) => o.status !== "PENDING") ?? null,
+    [orders]
+  );
+
   // Códigos de método de envío que existen de verdad en las órdenes ya
   // cargadas (no un catálogo hardcodeado) — el catálogo real vive en
   // /metodos-envio y puede crecer, así que el filtro se arma solo con lo
   // que ya se ve en la lista, mismo criterio que el resto de esta pantalla.
   const shippingMethodOptions = useMemo(() => {
-    if (!orders) return [];
-    return [...new Set(orders.map((o) => o.shippingMethod))].sort();
-  }, [orders]);
+    if (!visibleOrders) return [];
+    return [...new Set(visibleOrders.map((o) => o.shippingMethod))].sort();
+  }, [visibleOrders]);
 
   const filtered = useMemo(() => {
-    if (!orders) return null;
-    return orders.filter((order) => {
+    if (!visibleOrders) return null;
+    return visibleOrders.filter((order) => {
       if (statusFilter !== "ALL" && order.status !== statusFilter) return false;
       if (shippingMethodFilter !== "ALL" && order.shippingMethod !== shippingMethodFilter) {
         return false;
@@ -111,20 +119,19 @@ export default function OrdersPage() {
         order.shippingAddress.fullName.toLowerCase().includes(q)
       );
     });
-  }, [orders, query, statusFilter, shippingMethodFilter]);
+  }, [visibleOrders, query, statusFilter, shippingMethodFilter]);
 
   const stats = useMemo(() => {
-    if (!orders) return null;
+    if (!visibleOrders) return null;
     return {
-      total: orders.length,
-      pending: orders.filter((o) => o.status === "PENDING").length,
-      paid: orders.filter((o) => o.status === "PAID").length,
-      cancelled: orders.filter((o) =>
+      total: visibleOrders.length,
+      paid: visibleOrders.filter((o) => o.status === "PAID").length,
+      cancelled: visibleOrders.filter((o) =>
         ["CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"].includes(o.status)
       ).length,
-      refundedAmount: orders.reduce((sum, o) => sum + o.refundedAmount, 0),
+      refundedAmount: visibleOrders.reduce((sum, o) => sum + o.refundedAmount, 0),
     };
-  }, [orders]);
+  }, [visibleOrders]);
 
   const pageCount = filtered ? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)) : 1;
   // El filtro/búsqueda puede dejar `page` apuntando a una página que ya no
@@ -139,14 +146,14 @@ export default function OrdersPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Órdenes</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {orders
-              ? `${orders.length} orden${orders.length === 1 ? "" : "es"} en total.`
+            {visibleOrders
+              ? `${visibleOrders.length} orden${visibleOrders.length === 1 ? "" : "es"} en total.`
               : error
                 ? "No se pudieron cargar las órdenes."
                 : "Cargando órdenes desde la API..."}
           </p>
         </div>
-        {orders && orders.length > 0 && (
+        {visibleOrders && visibleOrders.length > 0 && (
           <Button type="button" variant="outline" className="gap-1.5" onClick={() => setExportOpen(true)}>
             <Download className="size-4" />
             Exportar producción
@@ -154,9 +161,8 @@ export default function OrdersPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard icon={Package} label="Total" value={stats?.total ?? null} tintIndex={0} />
-        <StatCard icon={Clock} label="Pendientes" value={stats?.pending ?? null} tintIndex={1} />
         <StatCard icon={Package} label="Pagadas" value={stats?.paid ?? null} tintIndex={2} />
         <StatCard
           icon={Ban}
@@ -179,13 +185,13 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {!orders && !error && (
+      {!visibleOrders && !error && (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
           <Loader2 className="size-5 animate-spin" />
         </div>
       )}
 
-      {orders && orders.length > 0 && (
+      {visibleOrders && visibleOrders.length > 0 && (
         <div className="flex flex-wrap gap-3">
           <div className="relative max-w-sm flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -246,7 +252,7 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {orders && orders.length === 0 && (
+      {visibleOrders && visibleOrders.length === 0 && (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border py-16 text-center">
           <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <PackageSearch className="size-5" />
@@ -258,7 +264,7 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {filtered && filtered.length === 0 && orders && orders.length > 0 && (
+      {filtered && filtered.length === 0 && visibleOrders && visibleOrders.length > 0 && (
         <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
           Ninguna orden coincide con el filtro.
         </div>
