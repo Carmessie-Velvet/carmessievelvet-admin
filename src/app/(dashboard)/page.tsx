@@ -49,7 +49,6 @@ import {
 import { SalesChart } from "@/components/dashboard/SalesChart";
 import { DonutChart } from "@/components/dashboard/DonutChart";
 import { SegmentedBar } from "@/components/dashboard/SegmentedBar";
-import { GaugeChart } from "@/components/dashboard/GaugeChart";
 import { Reveal } from "@/components/dashboard/Reveal";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { SectionIcon, SECTION_ICON_TINTS } from "@/components/ui/section-icon";
@@ -323,8 +322,12 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* ---- Fila de gráficas: 1+2+1, todas de altura de "chart" similar
-              (nada de row-span que deje huecos ni tarjetas gigantes vacías). ---- */}
+          {/* ---- Fila de gráficas: 1+2+1, luego Métodos de envío a todo el
+              ancho (antes compartía fila con "Conversión de pago", que se
+              quitó — dejaba de aportar algo una vez que PENDING se excluye
+              de todas las stats, ver CLAUDE.md) — todas de altura de
+              "chart" similar (nada de row-span que deje huecos ni tarjetas
+              gigantes vacías). ---- */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
             <Reveal delayMs={180}>
               <Card className="h-full">
@@ -414,7 +417,7 @@ export default function DashboardPage() {
               </Card>
             </Reveal>
 
-            <Reveal delayMs={360} className="lg:col-span-2">
+            <Reveal delayMs={360} className="lg:col-span-4">
               <Link href="/metodos-envio" className="block h-full">
                 <Card className="h-full">
                   <CardHeader>
@@ -438,37 +441,6 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
               </Link>
-            </Reveal>
-
-            <Reveal delayMs={420} className="lg:col-span-2">
-              <Card className="h-full">
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <SectionIcon icon={CreditCard} index={2} />
-                    <div>
-                      <CardTitle>Conversión de pago</CardTitle>
-                      <CardDescription>Creadas vs. pagadas.</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex flex-1 flex-wrap items-center justify-center gap-6 sm:justify-between">
-                  <GaugeChart
-                    percent={(dashboard.payments.conversionRate ?? 0) * 100}
-                    valueLabel={`${dashboard.payments.paidOrders} pagadas`}
-                    subLabel={`de ${dashboard.payments.createdOrders} creadas`}
-                  />
-                  <div className="grid grid-cols-2 gap-3 sm:min-w-48">
-                    <div className="rounded-lg bg-primary/5 px-3 py-2 text-center">
-                      <p className="text-xs text-muted-foreground">Creadas</p>
-                      <p className="text-sm font-semibold">{dashboard.payments.createdOrders}</p>
-                    </div>
-                    <div className="rounded-lg bg-velvet-light/10 px-3 py-2 text-center">
-                      <p className="text-xs text-muted-foreground">Pagadas</p>
-                      <p className="text-sm font-semibold">{dashboard.payments.paidOrders}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </Reveal>
           </div>
 
