@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, Loader2, Store } from "lucide-react";
+import { CalendarDays, ImageIcon, Loader2, Store } from "lucide-react";
 import { settingsService } from "@/services/settings-service";
 import { ApiError } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SectionIcon } from "@/components/ui/section-icon";
 import {
   Card,
@@ -18,6 +20,13 @@ import {
 } from "@/components/ui/card";
 import type { ApiAppSettings, ApiStoreStatus } from "@/types/settings";
 import { cn } from "@/lib/utils";
+
+// Mismos límites que valida la API en `POST /v1/settings/logo` (ver
+// `image.util.ts` en carmessievelvet-api) — se replican acá solo para
+// rechazar un archivo obviamente inválido antes de subirlo, no como fuente
+// de verdad (la API vuelve a validar del lado del servidor).
+const ALLOWED_LOGO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_LOGO_SIZE_BYTES = 5 * 1024 * 1024;
 
 /**
  * Orden de despliegue lunes-a-domingo (más natural para leer una semana),
@@ -42,6 +51,10 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [closedDays, setClosedDays] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +65,7 @@ export default function SettingsPage() {
         setSettings(loadedSettings);
         setStatus(loadedStatus);
         setClosedDays(new Set(loadedSettings.closedDays));
+        setDisplayName(loadedSettings.displayName);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -107,6 +121,52 @@ export default function SettingsPage() {
     }
   }
 
+  const isNameDirty = settings ? displayName.trim() !== settings.displayName : false;
+
+  async function handleSaveName() {
+    const trimmed = displayName.trim();
+    if (!trimmed) {
+      toast.error("El nombre no puede estar vacío.");
+      return;
+    }
+
+    setSavingName(true);
+    try {
+      const updated = await settingsService.updateAppSettings({ displayName: trimmed });
+      setSettings(updated);
+      setDisplayName(updated.displayName);
+      toast.success("Nombre actualizado.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo guardar el nombre.");
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function handleLogoFile(file: File | null) {
+    if (!file) return;
+
+    if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
+      toast.error("El logo debe ser JPEG, PNG o WEBP.");
+      return;
+    }
+    if (file.size > MAX_LOGO_SIZE_BYTES) {
+      toast.error("El logo no puede pesar más de 5MB.");
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const updated = await settingsService.uploadLogo(file);
+      setSettings(updated);
+      toast.success("Logo actualizado.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo subir el logo.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <div>
@@ -154,7 +214,84 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <SectionIcon icon={CalendarDays} index={1} />
+              <SectionIcon icon={ImageIcon} index={1} />
+              <div>
+                <CardTitle>Nombre y logo</CardTitle>
+                <CardDescription>
+                  Lo que se muestra en los correos que la tienda envía (confirmaciones de pedido,
+                  avisos, etc.).
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="displayName">Nombre de la tienda</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="displayName"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={120}
+                  className="max-w-sm"
+                />
+                <Button
+                  type="button"
+                  disabled={!isNameDirty || savingName}
+                  onClick={handleSaveName}
+                >
+                  {savingName ? "Guardando..." : "Guardar"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label>Logo</Label>
+              <div className="flex items-center gap-4">
+                <div className="flex size-20 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
+                  {settings.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={settings.logoUrl}
+                      alt="Logo de la tienda"
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <ImageIcon className="size-6 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={uploadingLogo}
+                    onClick={() => logoInputRef.current?.click()}
+                  >
+                    {uploadingLogo ? "Subiendo..." : "Cambiar logo"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">JPEG, PNG o WEBP, máx. 5MB.</p>
+                </div>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    handleLogoFile(e.target.files?.[0] ?? null);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {settings && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <SectionIcon icon={CalendarDays} index={2} />
               <div>
                 <CardTitle>Días de pedidos</CardTitle>
                 <CardDescription>
