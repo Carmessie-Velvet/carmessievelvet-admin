@@ -8,6 +8,8 @@ import type {
 export interface SettingsService {
   getAppSettings(): Promise<ApiAppSettings>;
   updateAppSettings(payload: UpdateApiAppSettingsPayload): Promise<ApiAppSettings>;
+  /** `POST /v1/settings/logo` — siempre reemplaza el logo actual, sin restricción de dimensiones (solo tipo jpeg/png/webp y máx. 5MB, validado por la API). */
+  uploadLogo(file: File): Promise<ApiAppSettings>;
   /** Público — lo mismo que ve el comprador en la tienda ahora mismo. Útil para confirmar que un cambio de `closedDays` ya surtió efecto. */
   getStoreStatus(): Promise<ApiStoreStatus>;
 }
@@ -23,6 +25,15 @@ export class RestSettingsService implements SettingsService {
     return apiFetch<ApiAppSettings>("/v1/settings", {
       method: "PATCH",
       body: JSON.stringify(payload),
+    });
+  }
+
+  async uploadLogo(file: File): Promise<ApiAppSettings> {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiFetch<ApiAppSettings>("/v1/settings/logo", {
+      method: "POST",
+      body: formData,
     });
   }
 
