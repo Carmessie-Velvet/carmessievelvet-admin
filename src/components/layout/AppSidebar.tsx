@@ -15,6 +15,7 @@ import {
   Ticket,
   Truck,
   Undo2,
+  Users,
   Warehouse,
 } from "lucide-react";
 import {
@@ -43,6 +44,7 @@ const navItems = [
   { href: "/tags", label: "Tags", icon: Tag },
   { href: "/metodos-envio", label: "Métodos de envío", icon: Truck },
   { href: "/envios-automatizados", label: "Envíos automatizados", icon: Warehouse },
+  { href: "/usuarios", label: "Usuarios", icon: Users },
   { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
