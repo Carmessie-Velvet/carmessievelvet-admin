@@ -11,6 +11,7 @@ import {
   Search,
   ShieldCheck,
   UserPlus,
+  X,
 } from "lucide-react";
 import { userService } from "@/services/user-service";
 import { useAuth } from "@/context/auth-context";
@@ -45,12 +46,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ApiUser, CreateAdminPayload, UserRole } from "@/types/users";
-import { USER_ROLE_LABEL } from "@/types/users";
+import { GRANTABLE_ROLES, USER_ROLE_LABEL } from "@/types/users";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
 
-const ROLE_FILTER_OPTIONS: UserRole[] = ["USER", "ADMIN", "SUPER_ADMIN"];
+const ROLE_FILTER_OPTIONS: UserRole[] = ["USER", "ADMIN", "MARKETING", "SALES", "SUPER_ADMIN"];
 
 const EMPTY_ADMIN_FORM: CreateAdminPayload = {
   email: "",
@@ -62,8 +63,8 @@ const EMPTY_ADMIN_FORM: CreateAdminPayload = {
 
 function roleBadgeVariant(role: UserRole): "default" | "secondary" | "outline" {
   if (role === "SUPER_ADMIN") return "default";
-  if (role === "ADMIN") return "secondary";
-  return "outline";
+  if (role === "USER") return "outline";
+  return "secondary"; // ADMIN, MARKETING, SALES — los tres son "staff" de este panel.
 }
 
 export default function UsersPage() {
@@ -87,6 +88,7 @@ export default function UsersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [adminForm, setAdminForm] = useState<CreateAdminPayload>(EMPTY_ADMIN_FORM);
+  const [createRole, setCreateRole] = useState<UserRole>("ADMIN");
 
   const [emailTarget, setEmailTarget] = useState<ApiUser | null>(null);
   const [emailValue, setEmailValue] = useState("");
@@ -99,14 +101,34 @@ export default function UsersPage() {
   // vive acá (dentro del callback del `setTimeout`, no síncrono en el
   // cuerpo del efecto) en vez de en el efecto de carga de abajo — mismo
   // criterio que `refreshing` en el dashboard (`page.tsx`).
+  //
+  // ⚠️ Bug real encontrado en vivo, en dos vueltas:
+  // 1) Todo efecto corre también al montar, con el valor inicial de
+  //    `searchInput` (`""`) — sin comparar contra algo, ese primer disparo
+  //    hacía `setLoading(true)` y luego `setSearch("")`/`setPage(1)` con
+  //    los mismos valores con los que ya arrancaban esos dos states, así
+  //    que React nunca detectaba un cambio real y el efecto de carga de
+  //    abajo (el único que pone `loading` en `false`) nunca se volvía a
+  //    ejecutar — la tabla quedaba atenuada (`opacity-60`) para siempre.
+  // 2) El primer arreglo usó un `useRef` como bandera de "ya montó" — se
+  //    ve razonable, pero Strict Mode (activo en `next dev`) ejecuta cada
+  //    efecto dos veces al montar SIN reiniciar los `ref`s entre esas dos
+  //    corridas (a diferencia del estado, que si Strict Mode desmontara y
+  //    remontara de verdad sí se reiniciaría) — la bandera solo bloqueaba
+  //    la primera de esas dos corridas, y la segunda igual armaba el
+  //    `setTimeout`. La comparación de abajo (`trimmed === search`) no
+  //    depende de nada mutable entre corridas — da el mismo resultado sin
+  //    importar cuántas veces Strict Mode repita el efecto.
   useEffect(() => {
     const id = setTimeout(() => {
+      const trimmed = searchInput.trim();
+      if (trimmed === search) return;
       setLoading(true);
-      setSearch(searchInput.trim());
+      setSearch(trimmed);
       setPage(1);
     }, 400);
     return () => clearTimeout(id);
-  }, [searchInput]);
+  }, [searchInput, search]);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,13 +164,25 @@ export default function UsersPage() {
     };
   }, [page, search, roleFilter, router]);
 
-  async function handleCreateAdmin() {
+  async function handleCreateAccount() {
     setCreating(true);
     try {
-      await userService.createAdmin(adminForm);
-      toast.success("Cuenta admin creada — le llegó un correo para verificarla.");
+      // `POST /users/admins` siempre crea con roles ["ADMIN"] exactos — la
+      // API no deja elegir el rol al crear. Si se pidió Marketing/Ventas,
+      // se corrige de inmediato con `assignRoles` (SUPER_ADMIN únicamente,
+      // por eso el selector solo ofrece esas opciones a un SUPER_ADMIN —
+      // ver el JSX del diálogo). Es una orquestación de dos llamadas
+      // existentes, no un endpoint nuevo del backend.
+      const created = await userService.createAdmin(adminForm);
+      if (createRole !== "ADMIN") {
+        await userService.assignRoles(created.id, [createRole]);
+      }
+      toast.success(
+        `Cuenta ${USER_ROLE_LABEL[createRole]} creada — le llegó un correo para verificarla.`
+      );
       setCreateOpen(false);
       setAdminForm(EMPTY_ADMIN_FORM);
+      setCreateRole("ADMIN");
       // Reinicia los filtros a como se ve la primera página por default. Si
       // ya estaban en ese estado, cambiar el state no dispara el efecto de
       // carga (mismo valor) — por eso se vuelve a pedir la lista acá mismo
@@ -170,21 +204,63 @@ export default function UsersPage() {
     }
   }
 
-  async function handlePromote(target: ApiUser) {
+  async function handleAssignRole(target: ApiUser, role: UserRole) {
     const ok = await confirm({
-      title: `¿Promover a ${target.firstName} ${target.lastName} a admin?`,
-      description: `${target.email} va a poder entrar a este panel de administración.`,
-      confirmLabel: "Promover",
+      title: `¿Otorgar el rol ${USER_ROLE_LABEL[role]} a ${target.firstName} ${target.lastName}?`,
+      description: `${target.email} va a poder entrar a este panel con ese rol, sin perder los que ya tiene.`,
+      confirmLabel: "Otorgar",
     });
     if (!ok) return;
 
     setBusyId(target.id);
     try {
-      const updated = await userService.promoteToAdmin(target.id);
-      setUsers((prev) => prev?.map((u) => (u.id === target.id ? updated : u)) ?? prev);
-      toast.success(`${target.email} ahora es admin.`);
+      // "Admin" sigue el endpoint dedicado (cualquier ADMIN puede usarlo);
+      // Marketing/Ventas van por `assignRoles`, que reemplaza el arreglo
+      // completo — por eso se manda la lista actual + el nuevo, deduplicada
+      // (mismo criterio aditivo que ya usa `promoteToAdmin` del lado del
+      // backend).
+      const nextRoles =
+        role === "ADMIN"
+          ? (await userService.promoteToAdmin(target.id)).roles
+          : await userService.assignRoles(target.id, [...new Set([...target.roles, role])]);
+      setUsers(
+        (prev) => prev?.map((u) => (u.id === target.id ? { ...u, roles: nextRoles } : u)) ?? prev
+      );
+      toast.success(`${target.email} ahora tiene el rol ${USER_ROLE_LABEL[role]}.`);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "No se pudo promover a admin.");
+      toast.error(err instanceof ApiError ? err.message : "No se pudo otorgar el rol.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // Mismo endpoint que `handleAssignRole` (`/roles/assign` reemplaza el
+  // arreglo completo) — acá se manda la lista actual SIN el rol elegido en
+  // vez de agregarlo. La API rechaza (400) un arreglo vacío
+  // (`@ArrayNotEmpty` en `AssignRolesDto`), así que nunca puede dejar a
+  // alguien sin ningún rol por esta vía — de todos modos no se ofrece el
+  // botón cuando sería el último rol (ver el `.filter` en el JSX).
+  async function handleRemoveRole(target: ApiUser, role: UserRole) {
+    const ok = await confirm({
+      title: `¿Quitar el rol ${USER_ROLE_LABEL[role]} a ${target.firstName} ${target.lastName}?`,
+      description: `${target.email} deja de poder usar lo que ese rol le daba en este panel.`,
+      confirmLabel: "Quitar",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setBusyId(target.id);
+    try {
+      const nextRoles = await userService.assignRoles(
+        target.id,
+        target.roles.filter((r) => r !== role)
+      );
+      setUsers(
+        (prev) => prev?.map((u) => (u.id === target.id ? { ...u, roles: nextRoles } : u)) ?? prev
+      );
+      toast.success(`Se le quitó el rol ${USER_ROLE_LABEL[role]} a ${target.email}.`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo quitar el rol.");
     } finally {
       setBusyId(null);
     }
@@ -228,7 +304,7 @@ export default function UsersPage() {
         </div>
         <Button type="button" className="gap-1.5" onClick={() => setCreateOpen(true)}>
           <UserPlus className="size-4" />
-          Crear cuenta admin
+          Crear cuenta
         </Button>
       </div>
 
@@ -251,8 +327,16 @@ export default function UsersPage() {
         <Select
           value={roleFilter}
           onValueChange={(v) => {
+            // Base UI también dispara esto una vez al montar con `v` vacío
+            // (mismo comportamiento ya visto en el `<Select>` de rango del
+            // dashboard, `page.tsx` — ahí sí tiene este guard). Sin él,
+            // `setLoading(true)` corría en ese disparo espurio y nunca se
+            // revertía (`setRoleFilter`/`setPage` con el mismo valor que ya
+            // tenían no dispara el efecto de carga que pone `loading` en
+            // `false`) — la tabla quedaba atenuada para siempre.
+            if (!v) return;
             setLoading(true);
-            setRoleFilter((v as UserRole | "ALL") ?? "ALL");
+            setRoleFilter(v as UserRole | "ALL");
             setPage(1);
           }}
         >
@@ -303,7 +387,16 @@ export default function UsersPage() {
               <TableBody>
                 {users.map((u) => {
                   const isSelf = u.id === currentUser?.id;
-                  const isAdminRow = u.roles.some((r) => r === "ADMIN" || r === "SUPER_ADMIN");
+                  const isSuperAdminRow = u.roles.includes("SUPER_ADMIN");
+                  // Marketing/Ventas van por `assignRoles` (SUPER_ADMIN
+                  // únicamente) — un ADMIN normal solo puede seguir
+                  // otorgando el rol Admin (el endpoint dedicado). Nunca se
+                  // ofrece nada acá para una cuenta que ya es SUPER_ADMIN.
+                  const assignableRoles = isSuperAdminRow
+                    ? []
+                    : GRANTABLE_ROLES.filter(
+                        (r) => !u.roles.includes(r) && (r === "ADMIN" || isSuperAdmin)
+                      );
                   return (
                     <TableRow key={u.id}>
                       <TableCell className="font-medium">
@@ -315,11 +408,30 @@ export default function UsersPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          {u.roles.map((r) => (
-                            <Badge key={r} variant={roleBadgeVariant(r)}>
-                              {USER_ROLE_LABEL[r]}
-                            </Badge>
-                          ))}
+                          {u.roles.map((r) => {
+                            // Nunca se puede quitar el único rol que le
+                            // queda a alguien (la API lo rechazaría de
+                            // todos modos, `@ArrayNotEmpty`) ni tocar los
+                            // roles de una cuenta SUPER_ADMIN desde acá.
+                            const canRemove =
+                              isSuperAdmin && !isSuperAdminRow && u.roles.length > 1;
+                            return (
+                              <Badge key={r} variant={roleBadgeVariant(r)} className="gap-1">
+                                {USER_ROLE_LABEL[r]}
+                                {canRemove && (
+                                  <button
+                                    type="button"
+                                    aria-label={`Quitar el rol ${USER_ROLE_LABEL[r]}`}
+                                    disabled={busyId === u.id}
+                                    onClick={() => handleRemoveRole(u, r)}
+                                    className="rounded-full hover:opacity-70 disabled:pointer-events-none disabled:opacity-50"
+                                  >
+                                    <X className="size-3" />
+                                  </button>
+                                )}
+                              </Badge>
+                            );
+                          })}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -332,25 +444,26 @@ export default function UsersPage() {
                         {new Date(u.createdAt).toLocaleDateString("es-MX")}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {!isAdminRow && (
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {assignableRoles.map((role) => (
                             <Button
+                              key={role}
                               type="button"
                               variant="outline"
                               size="sm"
                               className="gap-1"
                               disabled={busyId === u.id}
-                              onClick={() => handlePromote(u)}
+                              onClick={() => handleAssignRole(u, role)}
                             >
                               {busyId === u.id ? (
                                 <Loader2 className="size-3.5 animate-spin" />
                               ) : (
                                 <ShieldCheck className="size-3.5" />
                               )}
-                              Promover
+                              + {USER_ROLE_LABEL[role]}
                             </Button>
-                          )}
-                          {isAdminRow && isSuperAdmin && (
+                          ))}
+                          {isSuperAdmin && (
                             <Button
                               type="button"
                               variant="outline"
@@ -420,7 +533,7 @@ export default function UsersPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Crear cuenta admin</DialogTitle>
+            <DialogTitle>Crear cuenta</DialogTitle>
             <DialogDescription>
               Va a poder entrar a este panel con estos datos — nace sin verificar, como
               cualquier cuenta nueva.
@@ -430,9 +543,28 @@ export default function UsersPage() {
             className="flex flex-col gap-3"
             onSubmit={(e) => {
               e.preventDefault();
-              handleCreateAdmin();
+              handleCreateAccount();
             }}
           >
+            {isSuperAdmin ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="create-role">Rol</Label>
+                <Select value={createRole} onValueChange={(v) => setCreateRole(v as UserRole)}>
+                  <SelectTrigger id="create-role">
+                    <SelectValue>{(value: UserRole) => USER_ROLE_LABEL[value]}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GRANTABLE_ROLES.map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {USER_ROLE_LABEL[role]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Se crea como Admin.</p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="admin-firstName">Nombre</Label>

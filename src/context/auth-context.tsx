@@ -10,7 +10,11 @@ import { authStore } from "@/lib/auth-store";
 import { authService } from "@/services/auth-service";
 import type { AuthUser } from "@/types/auth";
 
-const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
+// Todo rol con acceso a este panel — ya no es solo ADMIN/SUPER_ADMIN desde
+// que existen MARKETING/SALES, cada uno viendo su propio subconjunto de
+// pantallas (ver `AppSidebar.tsx`). Mismo criterio/nombre que
+// `BACKOFFICE_ROLES` en `carmessievelvet-api` y en `types/users.ts`.
+const PANEL_ROLES = ["ADMIN", "SUPER_ADMIN", "MARKETING", "SALES"];
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -43,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const next = await authService.login(email, password);
-    if (!next.user.roles.some((role) => ADMIN_ROLES.includes(role))) {
+    if (!next.user.roles.some((role) => PANEL_ROLES.includes(role))) {
       throw new Error("Tu cuenta no tiene permisos de administrador.");
     }
     authStore.setSession(next);

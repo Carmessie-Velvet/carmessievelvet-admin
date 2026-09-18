@@ -9,7 +9,7 @@ import { ImagePlus, Loader2 } from "lucide-react";
 import { heroService } from "@/services/hero-service";
 import { ApiError } from "@/lib/api-client";
 import type { ApiCategory } from "@/types/catalog";
-import type { ApiHero } from "@/types/hero";
+import type { ApiHero, HeroImageVariant } from "@/types/hero";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -113,10 +113,16 @@ interface HeroEditorProps {
  * que `ExistingImagesManager`/el toggle de cupones.
  */
 export function HeroEditor({ hero, categories, onChange, onDeleted }: HeroEditorProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const desktopInputRef = useRef<HTMLInputElement>(null);
+  const mobileInputRef = useRef<HTMLInputElement>(null);
   const { confirm } = useConfirmDialog();
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [pendingCropFile, setPendingCropFile] = useState<File | null>(null);
+  // Qué variante está subiendo/recortando ahora mismo — `null` cuando
+  // ninguna, así el mismo estado sirve para las dos imágenes en vez de
+  // duplicar cuatro variables (una por variante × subiendo/pendiente).
+  const [uploadingVariant, setUploadingVariant] = useState<HeroImageVariant | null>(null);
+  const [pendingCrop, setPendingCrop] = useState<{ file: File; variant: HeroImageVariant } | null>(
+    null
+  );
   // Da un `key` nuevo al cropper por cada archivo elegido (ver
   // `HeroImageCropper`) para que remonte con estado (zoom/paneo) limpio,
   // incluso si el admin selecciona el mismo archivo dos veces seguidas.
@@ -173,17 +179,17 @@ export function HeroEditor({ hero, categories, onChange, onDeleted }: HeroEditor
     }
   }
 
-  async function uploadCroppedImage(croppedFile: File) {
-    setPendingCropFile(null);
-    setUploadingImage(true);
+  async function uploadCroppedImage(croppedFile: File, variant: HeroImageVariant) {
+    setPendingCrop(null);
+    setUploadingVariant(variant);
     try {
-      const updated = await heroService.uploadHeroImage(hero.id, croppedFile);
+      const updated = await heroService.uploadHeroImage(hero.id, croppedFile, variant);
       onChange(updated);
       toast.success("Imagen actualizada.");
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "No se pudo subir la imagen.");
     } finally {
-      setUploadingImage(false);
+      setUploadingVariant(null);
     }
   }
 
@@ -253,11 +259,11 @@ export function HeroEditor({ hero, categories, onChange, onDeleted }: HeroEditor
 
         <button
           type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={uploadingImage}
+          onClick={() => desktopInputRef.current?.click()}
+          disabled={uploadingVariant === "desktop"}
           className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-[#fffdfb]/90 px-3 py-1.5 text-xs font-medium text-[#2a1f1c] shadow-sm transition-opacity hover:bg-[#fffdfb] disabled:pointer-events-none disabled:opacity-60"
         >
-          {uploadingImage ? (
+          {uploadingVariant === "desktop" ? (
             <Loader2 className="size-3.5 animate-spin" />
           ) : (
             <ImagePlus className="size-3.5" />
@@ -313,15 +319,76 @@ export function HeroEditor({ hero, categories, onChange, onDeleted }: HeroEditor
         </div>
       </div>
 
+      {/*
+        Imagen mobile — recorte independiente, no una aproximación CSS de
+        la de arriba (ver `HeroImageCropper`'s `VARIANT_CONFIG.mobile`,
+        4:5). La API exige las dos imágenes antes de poder activar la
+        portada (ver el botón "Activar" abajo), así que esta card no es
+        opcional aunque la mayoría del contenido visual viva en la
+        previsualización de escritorio.
+      */}
+      <div className="flex items-center gap-4 rounded-xl border border-border p-4">
+        <div className="relative h-28 w-[90px] shrink-0 overflow-hidden rounded-lg bg-[#2a1f1c]">
+          {hero.imageMobileUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={hero.imageMobileUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] text-white/50">
+              Sin imagen
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium">Imagen para mobile</p>
+          <p className="text-xs text-muted-foreground">
+            Recorte vertical (4:5) — se usa en vez de la imagen de arriba en
+            pantallas angostas, en lugar de recortar esa misma foto con CSS.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-1.5 w-fit gap-1.5"
+            disabled={uploadingVariant === "mobile"}
+            onClick={() => mobileInputRef.current?.click()}
+          >
+            {uploadingVariant === "mobile" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <ImagePlus className="size-3.5" />
+            )}
+            {hero.imageMobileUrl ? "Cambiar imagen" : "Subir imagen"}
+          </Button>
+        </div>
+      </div>
+
       <input
-        ref={inputRef}
+        ref={desktopInputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) {
-            setPendingCropFile(file);
+            setPendingCrop({ file, variant: "desktop" });
+            setCropSession((n) => n + 1);
+          }
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={mobileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            setPendingCrop({ file, variant: "mobile" });
             setCropSession((n) => n + 1);
           }
           e.target.value = "";
@@ -330,9 +397,10 @@ export function HeroEditor({ hero, categories, onChange, onDeleted }: HeroEditor
 
       <HeroImageCropper
         key={cropSession}
-        file={pendingCropFile}
-        onCancel={() => setPendingCropFile(null)}
-        onConfirm={uploadCroppedImage}
+        file={pendingCrop?.file ?? null}
+        variant={pendingCrop?.variant ?? "desktop"}
+        onCancel={() => setPendingCrop(null)}
+        onConfirm={(file) => uploadCroppedImage(file, pendingCrop?.variant ?? "desktop")}
       />
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
@@ -412,8 +480,14 @@ export function HeroEditor({ hero, categories, onChange, onDeleted }: HeroEditor
               type="button"
               variant="outline"
               size="sm"
-              disabled={togglingActive || (!hero.active && !hero.imageUrl)}
-              title={!hero.active && !hero.imageUrl ? "Necesita una imagen para activarse" : undefined}
+              disabled={
+                togglingActive || (!hero.active && (!hero.imageUrl || !hero.imageMobileUrl))
+              }
+              title={
+                !hero.active && (!hero.imageUrl || !hero.imageMobileUrl)
+                  ? "Necesita las dos imágenes (escritorio y mobile) para activarse"
+                  : undefined
+              }
               onClick={toggleActive}
             >
               {togglingActive ? (

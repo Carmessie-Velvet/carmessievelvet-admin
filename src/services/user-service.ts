@@ -1,14 +1,21 @@
 import { apiFetch } from "@/lib/api-client";
 import type { PaginatedResult } from "@/types/catalog";
-import type { AdminUserQuery, ApiUser, CreateAdminPayload } from "@/types/users";
+import type { AdminUserQuery, ApiUser, CreateAdminPayload, UserRole } from "@/types/users";
 
 export interface UserService {
   getUsers(query?: AdminUserQuery): Promise<PaginatedResult<ApiUser>>;
   getUser(id: string): Promise<ApiUser>;
-  /** `POST /users/admins` — ADMIN o SUPER_ADMIN. Nace sin verificar, como cualquier signup. */
+  /** `POST /users/admins` — ADMIN o SUPER_ADMIN. Siempre crea con roles `["ADMIN"]` exactos (ni siquiera `USER`) — la API no acepta elegir el rol acá. Nace sin verificar, como cualquier signup. */
   createAdmin(payload: CreateAdminPayload): Promise<ApiUser>;
   /** `POST /users/:id/promote-to-admin` — agrega ADMIN a los roles existentes, no los reemplaza. */
   promoteToAdmin(id: string): Promise<ApiUser>;
+  /**
+   * `POST /roles/assign` — SUPER_ADMIN únicamente. ⚠️ **Reemplaza el arreglo
+   * completo de roles**, no agrega uno — el caller siempre debe mandar la
+   * lista final completa (ver `GRANTABLE_ROLES`/uso en `/usuarios`, que
+   * arma esa lista a mano antes de llamar esto, nunca un solo rol suelto).
+   */
+  assignRoles(userId: string, roles: UserRole[]): Promise<UserRole[]>;
   /** `PATCH /users/:id/email` — SUPER_ADMIN únicamente (la API 403s a un ADMIN normal). Invalida todas las sesiones del usuario afectado. */
   changeUserEmail(id: string, email: string): Promise<ApiUser>;
 }
@@ -39,6 +46,14 @@ export class RestUserService implements UserService {
     return apiFetch<ApiUser>(`/v1/users/${id}/promote-to-admin`, {
       method: "POST",
     });
+  }
+
+  async assignRoles(userId: string, roles: UserRole[]): Promise<UserRole[]> {
+    const result = await apiFetch<{ roles: UserRole[] }>("/v1/roles/assign", {
+      method: "POST",
+      body: JSON.stringify({ userId, roles }),
+    });
+    return result.roles;
   }
 
   async changeUserEmail(id: string, email: string): Promise<ApiUser> {
