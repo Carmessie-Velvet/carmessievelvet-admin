@@ -30,6 +30,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/context/auth-context";
+import { isNavItemVisible } from "@/lib/nav-access";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -50,6 +52,11 @@ const navItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
+  // MARKETING/SALES ven un subconjunto del menú (ver `lib/nav-access.ts`) —
+  // sin `user` todavía (carga inicial) no se muestra nada, se resuelve solo
+  // en el siguiente render una vez `useAuth()` hidrata la sesión.
+  const visibleItems = navItems.filter((item) => isNavItemVisible(item.href, user?.roles ?? []));
 
   return (
     <Sidebar collapsible="icon">
@@ -73,7 +80,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>General</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
+              {visibleItems.map((item) => {
                 const isActive =
                   item.href === "/"
                     ? pathname === "/"
