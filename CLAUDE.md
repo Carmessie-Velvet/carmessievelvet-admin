@@ -85,6 +85,10 @@ Al construir el soporte de sets arriba se conectó la creación/edición del **c
 - **`ordenes/[id]/page.tsx`** (tabla "Artículos"): la columna "Talla" muestra `item.selections` cuando existe (una línea por prenda, `"Top: S (Negro)"`) en vez de `item.size` a secas.
 - **`lib/export-production-report.ts`**: nueva `linesForItem()` — una línea de set se expande a **una fila de producción por prenda** (`"{producto} — {prenda}"`, la talla/cantidad de esa prenda), tanto en el resumen agrupado como en el detalle por orden; una línea simple sigue siendo una sola línea. Sin este cambio, un set no aportaba nada al resumen de qué cortar/coser — la clave de agrupación (`producto__talla`) siempre daba `producto__null`.
 
+### Bug encontrado por la clienta: el Excel de producción incluía órdenes `PENDING` (2026-09-19)
+
+`EXCLUDED_STATUSES` (`lib/export-production-report.ts`) solo excluía `CANCELLED`/`REFUNDED`/`PARTIALLY_REFUNDED` — una orden `PENDING` (nunca se pagó, un carrito abandonado en checkout) sí entraba al resumen y al detalle, mezclada con órdenes reales ya pagadas. El Excel es justo lo que se manda a producción para saber qué cortar/coser, así que una orden que nunca se pagó no debería aparecer ahí — se agregó `PENDING` a `EXCLUDED_STATUSES`. No hizo falta agregar nada más: `PAID`/`PROCESSING`/`SHIPPED`/`DELIVERED` son las únicas otras opciones y las cuatro implican que el pago ya ocurrió (el ciclo de vida de una orden solo llega a `PAID` vía el webhook de Stripe), así que "excluir `PENDING`" y "solo las pagadas" son la misma regla acá.
+
 ## Inicio de la tienda (portadas/hero)
 
 La clienta pidió poder configurar la imagen full-bleed de la portada de `carmessievelvet.com` (hasta ahora hardcodeada en el storefront) desde el admin, con previsualización en vivo — "que el admin vea el previsualizado y pueda editar sobre esa previsualización para que si lo cambia vea exactamente como lo verá el usuario final". El backend ya lo tenía listo (`GET/POST/PATCH/DELETE /v1/heroes`, imagen vía `POST/DELETE /v1/heroes/:id/image`, lectura pública vía `GET /store/hero` — ver `../carmessievelvet-api/src/modules/hero/CLAUDE.md`).
