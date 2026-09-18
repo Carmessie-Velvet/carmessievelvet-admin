@@ -6,8 +6,19 @@ import {
   type OrderStatus,
 } from "@/types/orders";
 
-/** Órdenes que ya no requieren producirse — se cancelaron o se devolvió el dinero. */
-const EXCLUDED_STATUSES: OrderStatus[] = ["CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
+/**
+ * Órdenes que no deben mandarse a producción: `PENDING` nunca se pagó (un
+ * carrito abandonado en checkout, no una compra real — mismo criterio que
+ * ya se usa para excluirlas del resto del admin, ver `/ordenes`), y
+ * `CANCELLED`/`REFUNDED`/`PARTIALLY_REFUNDED` ya no requieren producirse
+ * porque se canceló o se devolvió el dinero.
+ */
+const EXCLUDED_STATUSES: OrderStatus[] = [
+  "PENDING",
+  "CANCELLED",
+  "REFUNDED",
+  "PARTIALLY_REFUNDED",
+];
 
 interface ProductionLine {
   product: string;
