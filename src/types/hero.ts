@@ -16,13 +16,21 @@ export interface ApiHero {
   showTitle: boolean;
   showContent: boolean;
   showButton: boolean;
+  /** Desktop, ~16:9. */
   imageUrl: string | null;
   imageWidth: number | null;
   imageHeight: number | null;
+  /** Mobile, ~4:5 — recorte independiente, no un crop CSS de `imageUrl`. Ambas imágenes son obligatorias para poder activar la portada. */
+  imageMobileUrl: string | null;
+  imageMobileWidth: number | null;
+  imageMobileHeight: number | null;
   active: boolean;
   sortOrder: number;
   updatedAt: string;
 }
+
+/** Cuál de las dos imágenes de la portada afecta `POST`/`DELETE /heroes/:id/image?variant=...`. */
+export type HeroImageVariant = "desktop" | "mobile";
 
 /**
  * Created with no image and `active: false` — the only way to set those is
