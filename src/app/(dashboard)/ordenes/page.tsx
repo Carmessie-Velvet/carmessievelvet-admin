@@ -19,7 +19,9 @@ import { ApiError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/format-currency";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ExportProductionDialog } from "@/components/orders/ExportProductionDialog";
@@ -43,8 +45,10 @@ import { ORDER_STATUS_LABEL, statusBadgeVariant } from "@/types/orders";
 
 const PAGE_SIZE = 10;
 
-// Sin "PENDING" — son órdenes que nunca se pagaron (carrito abandonado en
-// checkout) y no le interesan al admin en esta lista, ver `visibleOrders`.
+// Sin "PENDING" por default — son órdenes que nunca se pagaron (carrito
+// abandonado en checkout). Se agrega a este mismo arreglo cuando el admin
+// prende "Incluir pendientes" (ver `statusOptions`/`visibleOrders`), así
+// también queda seleccionable en el filtro de estado, no solo visible.
 const STATUS_OPTIONS: OrderStatus[] = [
   "PAID",
   "PROCESSING",
@@ -64,6 +68,11 @@ export default function OrdersPage() {
   const [shippingMethodFilter, setShippingMethodFilter] = useState<string>("ALL");
   const [page, setPage] = useState(1);
   const [exportOpen, setExportOpen] = useState(false);
+  // Default = solo órdenes ya aprobadas (como antes). El admin lo prende
+  // para auditar que ninguna orden se haya "perdido" — el Excel de
+  // producción no se ve afectado por esto, sigue leyendo `orders` sin
+  // filtrar y excluyendo PENDING por su cuenta (`export-production-report.ts`).
+  const [includePending, setIncludePending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,12 +96,19 @@ export default function OrdersPage() {
     };
   }, [router]);
 
-  // "PENDING" = nunca se pagó (carrito abandonado en checkout) — no es una
-  // orden real todavía, así que se excluye de esta pantalla por completo
-  // (filtro, tabla, stats), no solo se le quita del dropdown.
+  // "PENDING" = nunca se pagó (carrito abandonado en checkout) — se excluye
+  // de esta pantalla por completo (filtro, tabla, stats) salvo que el admin
+  // prenda "Incluir pendientes", para poder auditar que ninguna orden real
+  // se haya perdido sin que las pendientes ensucien la vista por default.
   const visibleOrders = useMemo(
-    () => orders?.filter((o) => o.status !== "PENDING") ?? null,
-    [orders]
+    () =>
+      includePending ? orders : orders?.filter((o) => o.status !== "PENDING") ?? null,
+    [orders, includePending]
+  );
+
+  const statusOptions = useMemo(
+    () => (includePending ? (["PENDING", ...STATUS_OPTIONS] as OrderStatus[]) : STATUS_OPTIONS),
+    [includePending]
   );
 
   // Códigos de método de envío que existen de verdad en las órdenes ya
@@ -191,7 +207,12 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {visibleOrders && visibleOrders.length > 0 && (
+      {/* Ojo con `orders` (sin filtrar) acá, no `visibleOrders` — si no
+          quedan órdenes visibles bajo el scope actual (ej. todo lo que hay
+          son pendientes y el toggle está apagado) el checkbox para
+          activarlo igual tiene que poder verse, no solo cuando ya hay algo
+          que mostrar en la tabla. */}
+      {orders && orders.length > 0 && (
         <div className="flex flex-wrap gap-3">
           <div className="relative max-w-sm flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -221,13 +242,30 @@ export default function OrdersPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Todos los estados</SelectItem>
-              {STATUS_OPTIONS.map((status) => (
+              {statusOptions.map((status) => (
                 <SelectItem key={status} value={status}>
                   {ORDER_STATUS_LABEL[status]}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <Label className="rounded-md border border-input px-3 py-2 font-normal text-muted-foreground">
+            <Checkbox
+              checked={includePending}
+              onCheckedChange={(checked) => {
+                const next = checked === true;
+                setIncludePending(next);
+                // Si apaga el toggle mientras estaba filtrando justo por
+                // "Pendiente", ese valor deja de existir en `statusOptions`
+                // — se regresa a "Todos los estados" para no dejar el
+                // Select apuntando a una opción que ya no está.
+                if (!next && statusFilter === "PENDING") setStatusFilter("ALL");
+                setPage(1);
+              }}
+              aria-label="Incluir pendientes"
+            />
+            Incluir pendientes
+          </Label>
           <Select
             value={shippingMethodFilter}
             onValueChange={(v) => {
@@ -257,10 +295,23 @@ export default function OrdersPage() {
           <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <PackageSearch className="size-5" />
           </span>
-          <p className="text-sm font-medium">Todavía no hay órdenes</p>
-          <p className="text-sm text-muted-foreground">
-            Van a aparecer acá en cuanto alguien compre en la tienda.
-          </p>
+          {!includePending && orders && orders.length > 0 ? (
+            <>
+              <p className="text-sm font-medium">No hay órdenes aprobadas</p>
+              <p className="text-sm text-muted-foreground">
+                Hay {orders.length} orden{orders.length === 1 ? "" : "es"} pendiente
+                {orders.length === 1 ? "" : "s"} por pagar — activa &quot;Incluir pendientes&quot;
+                arriba para verlas.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium">Todavía no hay órdenes</p>
+              <p className="text-sm text-muted-foreground">
+                Van a aparecer acá en cuanto alguien compre en la tienda.
+              </p>
+            </>
+          )}
         </div>
       )}
 
