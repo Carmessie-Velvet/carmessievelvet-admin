@@ -101,6 +101,15 @@ export interface OrderItem {
    */
   size: string | null;
   /**
+   * Color elegido para esta línea, snapshot al momento de la compra — solo
+   * en una línea de un producto `SIMPLE` (que puede ofrecer más de un color
+   * por talla, ver "Varios colores en un producto SIMPLE" en `CLAUDE.md`).
+   * Ausente en una línea de un producto tipo set, donde el color vive por
+   * prenda en `selections`, y en una orden de antes de que este campo
+   * existiera.
+   */
+  color?: string;
+  /**
    * Solo presente (y no vacío) en una línea de un producto `category.type:
    * "SET"` — una entrada por cada prenda comprada. `quantity` de la línea
    * aplica a cada prenda por igual (comprar `quantity: 2` de un set son 2

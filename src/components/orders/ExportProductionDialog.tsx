@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { CalendarDays, Loader2 } from "lucide-react";
+import { CalendarDays, CalendarRange, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +18,7 @@ import {
   exportProductionReport,
   todayRange,
   thisWeekRange,
+  customRange,
   type ProductionReportRange,
 } from "@/lib/export-production-report";
 import type { ApiOrder } from "@/types/orders";
@@ -29,10 +32,9 @@ interface ExportProductionDialogProps {
 
 /**
  * Diálogo para descargar el reporte de producción en Excel (hoy / esta
- * semana) — pedido explícito de la clienta para saber qué elaborar sin
- * tener que abrir cada orden a mano. Excluye CANCELLED/REFUNDED/
- * PARTIALLY_REFUNDED (ver `export-production-report.ts`), nunca inventa
- * un rango — solo los dos presets pedidos.
+ * semana / un rango de fechas a elegir) — pedido explícito de la clienta
+ * para saber qué elaborar sin tener que abrir cada orden a mano. Excluye
+ * CANCELLED/REFUNDED/PARTIALLY_REFUNDED (ver `export-production-report.ts`).
  */
 export function ExportProductionDialog({
   open,
@@ -40,6 +42,10 @@ export function ExportProductionDialog({
   orders,
 }: ExportProductionDialogProps) {
   const [exporting, setExporting] = useState(false);
+  // Strings tal cual las da un <input type="date"> ("YYYY-MM-DD") — se
+  // parsean solo al exportar, no en cada tecleo.
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   async function handleExport(range: ProductionReportRange) {
     setExporting(true);
@@ -58,6 +64,27 @@ export function ExportProductionDialog({
     } finally {
       setExporting(false);
     }
+  }
+
+  // `<input type="date">` da la fecha en hora local ya sin componente de
+  // hora ("YYYY-MM-DD") — `new Date("YYYY-MM-DD")` la interpreta como UTC
+  // medianoche, lo que puede correr un día para atrás en zonas horarias
+  // negativas (México). Partir a mano los componentes y construirla con el
+  // constructor `Date(y, m, d)` (siempre hora local) evita ese corrimiento.
+  function parseLocalDate(value: string): Date | null {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) return null;
+    const [, year, month, day] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+
+  const parsedFrom = parseLocalDate(fromDate);
+  const parsedTo = parseLocalDate(toDate);
+  const customRangeValid = !!parsedFrom && !!parsedTo && parsedFrom <= parsedTo;
+
+  function handleExportCustomRange() {
+    if (!parsedFrom || !parsedTo) return;
+    handleExport(customRange(parsedFrom, parsedTo));
   }
 
   return (
@@ -91,6 +118,46 @@ export function ExportProductionDialog({
           >
             <CalendarDays className="size-4" />
             Órdenes de esta semana (lunes a domingo)
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-2 border-t border-border pt-4">
+          <Label className="text-sm font-medium">Rango personalizado</Label>
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <Label htmlFor="export-from-date" className="text-xs font-normal text-muted-foreground">
+                Desde
+              </Label>
+              <Input
+                id="export-from-date"
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </div>
+            <div className="flex-1">
+              <Label htmlFor="export-to-date" className="text-xs font-normal text-muted-foreground">
+                Hasta
+              </Label>
+              <Input
+                id="export-to-date"
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-start gap-2"
+            disabled={exporting || !customRangeValid}
+            onClick={handleExportCustomRange}
+          >
+            <CalendarRange className="size-4" />
+            Exportar rango
           </Button>
         </div>
 

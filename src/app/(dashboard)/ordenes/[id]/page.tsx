@@ -831,7 +831,10 @@ export default function OrderDetailPage() {
                           ))}
                         </div>
                       ) : (
-                        item.size
+                        <>
+                          {item.size}
+                          {item.color ? ` (${item.color})` : ""}
+                        </>
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{item.quantity}</TableCell>
