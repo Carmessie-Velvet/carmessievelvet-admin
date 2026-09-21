@@ -63,12 +63,25 @@ export interface OrderService {
 export class RestOrderService implements OrderService {
   async getOrders(): Promise<ApiOrder[]> {
     // Filtering (status/email/orderNumber) is done client-side over this
-    // list, same pattern as the product catalog — the store is small enough
-    // that one page (max 100) covers it without a filtered-refetch flow.
-    const result = await apiFetch<PaginatedResult<ApiOrder>>(
-      "/v1/orders?limit=100"
+    // list, same pattern as the product catalog. Used to cap at a single
+    // `limit=100` page assuming the store would never grow past that — it
+    // did, and that silently undercounted `/ordenes`'s "Total" once there
+    // were more than 100 orders. Fetches every page instead now, the first
+    // one sequentially (to learn `totalPages`) and the rest in parallel.
+    const PAGE_LIMIT = 100;
+    const first = await apiFetch<PaginatedResult<ApiOrder>>(
+      `/v1/orders?limit=${PAGE_LIMIT}&page=1`
     );
-    return result.items;
+    if (first.totalPages <= 1) return first.items;
+
+    const restPages = await Promise.all(
+      Array.from({ length: first.totalPages - 1 }, (_, i) =>
+        apiFetch<PaginatedResult<ApiOrder>>(
+          `/v1/orders?limit=${PAGE_LIMIT}&page=${i + 2}`
+        )
+      )
+    );
+    return [...first.items, ...restPages.flatMap((page) => page.items)];
   }
 
   async getOrder(id: string): Promise<ApiOrder> {
