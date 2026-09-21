@@ -120,9 +120,9 @@ export default function NewProductPage() {
           Nuevo producto
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Se crea directo en el catálogo real. El color es un solo valor por
-          producto (no por talla) — si el mismo diseño viene en otro color,
-          se crea como un producto aparte.
+          Se crea directo en el catálogo real. Un producto puede ofrecerse en
+          varios colores — agrega una fila por cada combinación de talla y
+          color en &quot;Stock por talla&quot; más abajo.
         </p>
       </div>
 
@@ -230,10 +230,14 @@ export default function NewProductPage() {
                     name="color"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Color</FormLabel>
+                        <FormLabel>Color por defecto (opcional)</FormLabel>
                         <FormControl>
                           <Input placeholder="Ej. Negro" {...field} />
                         </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          Se usa solo si una variante de talla no trae su
+                          propio color en &quot;Stock por talla&quot;.
+                        </p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -350,7 +354,7 @@ export default function NewProductPage() {
                   <CardDescription>
                     {isSet
                       ? "Cada prenda tiene su propio color y stock por talla — el comprador elige por prenda, no por el producto."
-                      : "Cuánto stock hay disponible en cada talla, o márcalo como sobre pedido para venderlo sin inventario."}
+                      : "Cuánto stock hay disponible en cada talla y color, o márcalo como sobre pedido para venderlo sin inventario. Agrega una fila por cada color en el que ofrezcas una talla."}
                   </CardDescription>
                 </div>
               </div>
