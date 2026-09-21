@@ -1,16 +1,19 @@
 /**
  * Shapes returned by the real Carmessie API (`carmessievelvet-api`). Color
- * es un campo libre — a nivel producto para uno `SIMPLE` (un color por
- * SKU, dos colores del mismo diseño son dos productos aparte), o a nivel
- * variante dentro de cada prenda para uno `SET` (ver `ApiProductComponent`).
+ * es un campo libre por variante (`ApiProductVariant.color`, 2026-09-21) —
+ * tanto en un producto `SIMPLE` (`ApiProduct.variants`, que ya puede
+ * ofrecer más de un color por talla) como en cada prenda de un `SET`
+ * (`ApiProductComponent.variants`). `ApiProduct.color` sigue existiendo
+ * como el color por defecto/fallback cuando una variante no trae el suyo.
  */
 export type CategoryType = "SIMPLE" | "SET";
 
 /**
  * `type` decide la forma de **todo** producto dentro de la categoría —
  * nunca el `name` de la categoría. `SIMPLE`: el producto manda `variants`
- * (una talla, un color propio). `SET`: el producto se compone de 2+
- * prendas (`components`), cada una con su propio color/stock por talla.
+ * (talla + color por variante, uno o varios colores). `SET`: el producto
+ * se compone de 2+ prendas (`components`), cada una con su propio
+ * color/stock por talla.
  */
 export interface ApiCategory {
   id: string;
@@ -33,10 +36,11 @@ export interface ApiProductVariant {
   soldOut: boolean;
   sku?: string;
   /**
-   * Color de esta variante puntual — sólo tiene valor real dentro de
-   * `ApiProductComponent.variants` (una prenda de un set). `null`/ausente
-   * en una variante de producto `SIMPLE`, donde el color vive en
-   * `ApiProduct.color` en su lugar.
+   * Color de esta variante puntual — tanto dentro de
+   * `ApiProductComponent.variants` (una prenda de un set) como en
+   * `ApiProduct.variants` de un producto `SIMPLE` (que puede ofrecer más de
+   * un color, uno por variante). `null`/ausente cae al color por defecto
+   * del producto (`ApiProduct.color`) en tiempo de lectura.
    */
   color?: string | null;
 }
@@ -106,7 +110,7 @@ export interface CreateApiProductVariant {
   stock?: number;
   /** Override manual: esta talla nunca se puede comprar mientras sea true. */
   soldOut?: boolean;
-  /** Solo tiene efecto dentro de `CreateApiProductComponent.variants` — ignorado a nivel producto. */
+  /** Color de esta variante — tanto a nivel producto `SIMPLE` (`variants`) como dentro de una prenda de un `SET` (`CreateApiProductComponent.variants`). Omitir cae al color por defecto del producto (`CreateApiProductPayload.color`) en tiempo de lectura. */
   color?: string;
 }
 
@@ -132,7 +136,7 @@ export interface CreateApiProductPayload {
   price: number;
   /** Optional — the API auto-generates one (`SKU-XXXXXXXX`) if omitted. */
   sku?: string;
-  /** Ignorado (la API lo rechaza) si la categoría es `SET` — el color vive por prenda ahí. */
+  /** Color por defecto del producto — fallback para cualquier variante en `variants` que no traiga el suyo propio. Ignorado (la API lo rechaza) si la categoría es `SET` — el color vive por prenda ahí. */
   color?: string;
   /**
    * Si se omite, la API lo infiere como `true` cuando ninguna variante trae
@@ -151,9 +155,9 @@ export interface CreateApiProductPayload {
 /**
  * `PATCH /api/v1/products/:sku` — all fields optional, only sent ones are
  * changed. `variants`/`components` (like on create) replace the full set:
- * sizes/prendas left out are soft-deleted. Images are never part of this
- * payload — they go through the separate `/products/:sku/images` endpoints
- * below.
+ * (size, color) pairs/prendas left out are soft-deleted. Images are never
+ * part of this payload — they go through the separate `/products/:sku/images`
+ * endpoints below.
  */
 export interface UpdateApiProductPayload {
   name?: string;

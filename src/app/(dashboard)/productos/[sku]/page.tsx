@@ -62,14 +62,19 @@ function valuesFromProduct(product: ApiProduct): ProductEditFormValues {
     active: product.active,
     madeToOrder: product.madeToOrder,
     tagIds: product.tags.map((t) => t.id),
-    variants: commonSizes.map((size) => {
-      const variant = product.variants.find((v) => v.size === size);
-      return {
-        size,
-        stock: variant?.stock ?? 0,
-        soldOut: variant?.soldOut ?? false,
-      };
-    }),
+    // Uno por variante real, no uno por `commonSizes` — un producto puede
+    // ofrecer la misma talla en más de un color (ver "Color" en el CLAUDE.md
+    // de la API), así que forzar una sola fila por talla perdería el resto.
+    // Sin variantes todavía (no debería pasar en un producto real, pero por
+    // si acaso) cae a una fila vacía por talla, igual que un producto nuevo.
+    variants: product.variants.length
+      ? product.variants.map((v) => ({
+          size: v.size,
+          color: v.color ?? "",
+          stock: v.stock,
+          soldOut: v.soldOut,
+        }))
+      : commonSizes.map((size) => ({ size, color: "", stock: 0, soldOut: false })),
     components: product.components
       .slice()
       .sort((a, b) => a.position - b.position)
@@ -393,10 +398,14 @@ function ProductEditForm({
                     name="color"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Color</FormLabel>
+                        <FormLabel>Color por defecto (opcional)</FormLabel>
                         <FormControl>
                           <Input placeholder="Ej. Negro" {...field} />
                         </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          Se usa solo si una variante de talla no trae su
+                          propio color en &quot;Stock por talla&quot;.
+                        </p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -532,7 +541,7 @@ function ProductEditForm({
                   <CardDescription>
                     {isSet
                       ? "Cada prenda tiene su propio color y stock por talla — el comprador elige por prenda, no por el producto."
-                      : "Cuánto stock hay disponible en cada talla, o márcalo como sobre pedido para venderlo sin inventario."}
+                      : "Cuánto stock hay disponible en cada talla y color, o márcalo como sobre pedido para venderlo sin inventario. Agrega una fila por cada color en el que ofrezcas una talla."}
                   </CardDescription>
                 </div>
               </div>
