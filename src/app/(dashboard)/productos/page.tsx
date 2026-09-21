@@ -56,8 +56,24 @@ function isFullySoldOut(product: ApiProduct): boolean {
 
 const PAGE_SIZE = 10;
 
+/**
+ * Colores distintos que ofrece el producto — de las variantes propias
+ * (`SIMPLE`, que puede tener más de un color) o de las de cada prenda
+ * (`SET`), con el color por defecto del producto como fallback si ninguna
+ * variante trae el suyo (mismo criterio que `resolveVariantColor()` en la API).
+ */
+function productColors(product: ApiProduct): string[] {
+  const variants =
+    product.category.type === "SET"
+      ? product.components.flatMap((c) => c.variants)
+      : product.variants;
+  const variantColors = [...new Set(variants.map((v) => v.color).filter((c): c is string => Boolean(c)))];
+  if (variantColors.length) return variantColors;
+  return product.color ? [product.color] : [];
+}
+
 function matchesQuery(product: ApiProduct, query: string): boolean {
-  const haystack = [product.name, product.sku, product.category.name, product.color]
+  const haystack = [product.name, product.sku, product.category.name, ...productColors(product)]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -281,7 +297,7 @@ export default function ProductsPage() {
                       {product.category.name}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {product.color ?? "—"}
+                      {productColors(product).join(", ") || "—"}
                     </TableCell>
                     <TableCell>{formatCurrency(product.finalPrice)}</TableCell>
                     <TableCell>

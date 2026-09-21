@@ -1,19 +1,21 @@
 import { z } from "zod";
 import { commonSizes } from "@/mocks/sizes";
 
+/**
+ * Una variante talla×color — mismo shape tanto para las variantes de nivel
+ * superior de un producto `SIMPLE` (que ahora puede ofrecer más de un color,
+ * ver "Color" en el `CLAUDE.md` de la API) como para las de cada prenda
+ * (`components[]`) de un `SET`.
+ */
 export const productVariantSchema = z.object({
-  size: z.string().min(1),
-  stock: z.number().min(0, "El stock no puede ser negativo"),
-  soldOut: z.boolean(),
-});
-
-/** Una variante talla×color dentro de una prenda (`components[]`) de un set. */
-export const componentVariantSchema = z.object({
   size: z.string().min(1),
   color: z.string().trim().max(50, "Máximo 50 caracteres"),
   stock: z.number().min(0, "El stock no puede ser negativo"),
   soldOut: z.boolean(),
 });
+
+/** Alias histórico — mismo schema, usado dentro de `productComponentSchema`. */
+export const componentVariantSchema = productVariantSchema;
 
 /** Una "prenda" de un producto en una categoría `SET` (ej. "Top", "Panty"). */
 export const productComponentSchema = z.object({
@@ -83,7 +85,7 @@ export const defaultProductFormValues: ProductFormValues = {
   tagIds: [],
   images: [],
   video: null,
-  variants: commonSizes.map((size) => ({ size, stock: 0, soldOut: false })),
+  variants: commonSizes.map((size) => ({ size, color: "", stock: 0, soldOut: false })),
   components: [],
 };
 
