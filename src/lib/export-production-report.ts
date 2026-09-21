@@ -24,6 +24,8 @@ interface ProductionLine {
   product: string;
   sku: string;
   size: string;
+  /** "—" cuando la línea no tiene color (producto de un solo color, o una orden de antes de que este campo existiera) — nunca vacío, para que la columna del Excel no se vea en blanco. */
+  color: string;
   quantity: number;
 }
 
@@ -41,6 +43,7 @@ function linesForItem(item: OrderItem): ProductionLine[] {
       product: `${item.productName} — ${selection.componentName}`,
       sku: item.productSku ?? "—",
       size: selection.size,
+      color: selection.color ?? "—",
       quantity: item.quantity,
     }));
   }
@@ -49,6 +52,7 @@ function linesForItem(item: OrderItem): ProductionLine[] {
       product: item.productName,
       sku: item.productSku ?? "—",
       size: item.size ?? "—",
+      color: item.color ?? "—",
       quantity: item.quantity,
     },
   ];
@@ -90,6 +94,18 @@ export function thisWeekRange(): ProductionReportRange {
 }
 
 /**
+ * Rango elegido a mano por el admin (`ExportProductionDialog`'s inputs de
+ * fecha) — a diferencia de los dos presets de arriba, `from`/`to` ya vienen
+ * en hora local sin componente de hora (un `<input type="date">` los da
+ * así), así que igual se normalizan a inicio/fin de día para no perder
+ * órdenes creadas más tarde el mismo día de `to`.
+ */
+export function customRange(from: Date, to: Date): ProductionReportRange {
+  const label = `${from.toLocaleDateString("es-MX")} – ${to.toLocaleDateString("es-MX")}`;
+  return { from: startOfDay(from), to: endOfDay(to), label };
+}
+
+/**
  * Genera y descarga un Excel con dos hojas: un resumen de producción
  * (agrupado por producto + talla, para saber qué cortar/coser) y el
  * detalle de cada orden en el rango (para rastrear un pedido puntual).
@@ -116,7 +132,10 @@ export async function exportProductionReport(
   for (const order of inRange) {
     for (const item of order.items) {
       for (const line of linesForItem(item)) {
-        const key = `${line.product}__${line.size}`;
+        // El color entra a la clave de agrupación — dos colores de la misma
+        // talla se cortan/cosen distinto, así que son dos filas de resumen,
+        // no una sola con la cantidad sumada a ciegas.
+        const key = `${line.product}__${line.size}__${line.color}`;
         const existing = summaryByKey.get(key);
         if (existing) {
           existing.quantity += line.quantity;
@@ -132,6 +151,7 @@ export async function exportProductionReport(
     { header: "Producto", key: "product", width: 34 },
     { header: "SKU", key: "sku", width: 16 },
     { header: "Talla", key: "size", width: 10 },
+    { header: "Color", key: "color", width: 14 },
     { header: "Cantidad", key: "quantity", width: 12 },
   ];
   summarySheet.getRow(1).font = { bold: true };
@@ -147,6 +167,7 @@ export async function exportProductionReport(
     { header: "Producto", key: "product", width: 34 },
     { header: "SKU", key: "sku", width: 16 },
     { header: "Talla", key: "size", width: 10 },
+    { header: "Color", key: "color", width: 14 },
     { header: "Cantidad", key: "quantity", width: 12 },
     { header: "Fecha", key: "date", width: 14 },
   ];
@@ -161,6 +182,7 @@ export async function exportProductionReport(
           product: line.product,
           sku: line.sku,
           size: line.size,
+          color: line.color,
           quantity: line.quantity,
           date: new Date(order.createdAt).toLocaleDateString("es-MX"),
         });
@@ -176,7 +198,13 @@ export async function exportProductionReport(
   const link = document.createElement("a");
   link.href = url;
   const dateStamp = new Date().toISOString().slice(0, 10);
-  const slug = range.label.toLowerCase().replace(/\s+/g, "-");
+  // `range.label` puede traer "/" y "–" (rango personalizado, ej. "21/09/2026
+  // – 28/09/2026") — ningún caracter que no sea alfanumérico sobrevive al
+  // nombre de archivo, para no arriesgar un separador de ruta en el download.
+  const slug = range.label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   link.download = `produccion-${slug}-${dateStamp}.xlsx`;
   link.click();
   URL.revokeObjectURL(url);
