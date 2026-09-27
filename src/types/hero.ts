@@ -1,4 +1,14 @@
 /**
+ * Qué sección de la tienda es esta fila — comparten tabla/pipeline de
+ * imágenes/validación de dimensiones en la API (ver "Banner section" en
+ * `carmessievelvet-api/src/modules/hero/CLAUDE.md`), la única diferencia es
+ * que `BANNER` es solo-imagen (la API rechaza `title`/`content`/
+ * `buttonLabel`/`buttonPath`/cualquier `show*` en `true` para una fila
+ * `BANNER`). Inmutable después de crear.
+ */
+export type HeroSection = "MAIN" | "BANNER";
+
+/**
  * `carmessievelvet-api`'s hero module (`GET/POST/PATCH/DELETE /v1/heroes`,
  * `POST/DELETE /v1/heroes/:id/image`). Naming carries over from the API
  * verbatim even though it reads oddly next to the storefront's own copy:
@@ -9,6 +19,7 @@
  */
 export interface ApiHero {
   id: string;
+  section: HeroSection;
   title: string | null;
   content: string | null;
   buttonLabel: string | null;
@@ -34,9 +45,12 @@ export type HeroImageVariant = "desktop" | "mobile";
 
 /**
  * Created with no image and `active: false` — the only way to set those is
- * the dedicated image-upload and status endpoints below.
+ * the dedicated image-upload and status endpoints below. `section` es
+ * opcional (default `MAIN`, `HeroService` de la API) e inmutable después de
+ * crear — no vive en `UpdateApiHeroPayload`.
  */
 export interface CreateApiHeroPayload {
+  section?: HeroSection;
   title?: string;
   content?: string;
   buttonLabel?: string;
@@ -47,4 +61,4 @@ export interface CreateApiHeroPayload {
   sortOrder?: number;
 }
 
-export type UpdateApiHeroPayload = CreateApiHeroPayload;
+export type UpdateApiHeroPayload = Omit<CreateApiHeroPayload, "section">;

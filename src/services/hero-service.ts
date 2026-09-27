@@ -3,19 +3,22 @@ import type {
   ApiHero,
   CreateApiHeroPayload,
   HeroImageVariant,
+  HeroSection,
   UpdateApiHeroPayload,
 } from "@/types/hero";
 
 /**
- * Portadas del inicio de la tienda (`/v1/heroes`). Una portada nace sin
- * imagen y `active: false` — solo se puede activar una vez que tiene
- * **ambas** imágenes, desktop y mobile (`setStatus`, la API 400s si falta
- * cualquiera de las dos). El texto (`update`) y las imágenes
- * (`uploadImage`/`deleteImage`, un variant a la vez) son endpoints
- * separados, igual que las imágenes/video de producto.
+ * Portadas del inicio de la tienda y banner secundario (`/v1/heroes`,
+ * discriminados por `section` — ver "Banner section" en el `CLAUDE.md` del
+ * módulo hero de la API). Una fila nace sin imagen y `active: false` — solo
+ * se puede activar una vez que tiene **ambas** imágenes, desktop y mobile
+ * (`setStatus`, la API 400s si falta cualquiera de las dos). El texto
+ * (`update`, no aplica a un `BANNER`) y las imágenes (`uploadImage`/
+ * `deleteImage`, un variant a la vez) son endpoints separados, igual que
+ * las imágenes/video de producto.
  */
 export interface HeroService {
-  getHeroes(): Promise<ApiHero[]>;
+  getHeroes(section?: HeroSection): Promise<ApiHero[]>;
   createHero(payload: CreateApiHeroPayload): Promise<ApiHero>;
   updateHero(id: string, payload: UpdateApiHeroPayload): Promise<ApiHero>;
   setHeroStatus(id: string, active: boolean): Promise<ApiHero>;
@@ -25,8 +28,9 @@ export interface HeroService {
 }
 
 export class RestHeroService implements HeroService {
-  async getHeroes(): Promise<ApiHero[]> {
-    return apiFetch<ApiHero[]>("/v1/heroes");
+  async getHeroes(section?: HeroSection): Promise<ApiHero[]> {
+    const qs = section ? `?section=${section}` : "";
+    return apiFetch<ApiHero[]>(`/v1/heroes${qs}`);
   }
 
   async createHero(payload: CreateApiHeroPayload): Promise<ApiHero> {
