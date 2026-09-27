@@ -58,6 +58,13 @@ export interface OrderService {
   getReturnRequests(status: ReturnRequestStatus): Promise<ApiOrder[]>;
   /** Rechaza la solicitud de devolución pendiente de la orden sin reembolsar nada. */
   rejectReturnRequest(id: string, reason: string): Promise<ApiOrder>;
+  /**
+   * Agrega/edita/borra la nota interna de la orden — `null` (o vacío) la
+   * limpia, cualquier otro string la reemplaza. Un solo endpoint cubre los
+   * tres casos. Solo ADMIN/SUPER_ADMIN puede llamarlo (la API 403s a
+   * MARKETING/SALES aunque sí puedan leer la nota en el resto de las rutas).
+   */
+  updateAdminNotes(id: string, adminNotes: string | null): Promise<ApiOrder>;
 }
 
 export class RestOrderService implements OrderService {
@@ -151,6 +158,13 @@ export class RestOrderService implements OrderService {
     return apiFetch<ApiOrder>(`/v1/orders/${id}/return-request/reject`, {
       method: "POST",
       body: JSON.stringify({ reason }),
+    });
+  }
+
+  async updateAdminNotes(id: string, adminNotes: string | null): Promise<ApiOrder> {
+    return apiFetch<ApiOrder>(`/v1/orders/${id}/admin-notes`, {
+      method: "PATCH",
+      body: JSON.stringify({ adminNotes }),
     });
   }
 }

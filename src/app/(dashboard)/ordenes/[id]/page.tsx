@@ -13,12 +13,15 @@ import {
   Package,
   Receipt,
   RefreshCw,
+  StickyNote,
   Truck,
   Undo2,
 } from "lucide-react";
 import { orderService } from "@/services/order-service";
 import { enviatodoService } from "@/services/enviatodo-service";
 import { ApiError } from "@/lib/api-client";
+import { useAuth } from "@/context/auth-context";
+import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RefundDialog, type RefundPayload } from "@/components/orders/RefundDialog";
 import { formatCurrency } from "@/lib/format-currency";
@@ -129,6 +132,7 @@ function StatusGuideCard() {
 
 export default function OrderDetailPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const { prompt } = useConfirmDialog();
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<ApiOrder | null>(null);
@@ -136,6 +140,15 @@ export default function OrderDetailPage() {
   const [trackingNumber, setTrackingNumber] = useState("");
   const [carrier, setCarrier] = useState("");
   const [busy, setBusy] = useState(false);
+  const [adminNotesDraft, setAdminNotesDraft] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  // Cualquier rol de backoffice ya puede LEER `adminNotes` (viene con la
+  // orden), pero solo ADMIN/SUPER_ADMIN puede escribirla — la API 403s el
+  // PATCH para MARKETING/SALES, así que el textarea se deja de solo lectura
+  // acá mismo en vez de dejar que fallen al guardar.
+  const canEditAdminNotes = (user?.roles ?? []).some(
+    (role) => role === "ADMIN" || role === "SUPER_ADMIN"
+  );
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [approveReturnDialogOpen, setApproveReturnDialogOpen] = useState(false);
 
@@ -159,6 +172,7 @@ export default function OrderDetailPage() {
           setOrder(data);
           setTrackingNumber(data.trackingNumber ?? "");
           setCarrier(data.carrier ?? "");
+          setAdminNotesDraft(data.adminNotes ?? "");
         }
       })
       .catch((err: unknown) => {
@@ -358,6 +372,22 @@ export default function OrderDetailPage() {
     }
   }
 
+  async function handleSaveAdminNotes() {
+    if (!order) return;
+    setSavingNotes(true);
+    try {
+      const trimmed = adminNotesDraft.trim();
+      const updated = await orderService.updateAdminNotes(order.id, trimmed || null);
+      setOrder(updated);
+      setAdminNotesDraft(updated.adminNotes ?? "");
+      toast.success("Nota interna actualizada.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "No se pudo guardar la nota.");
+    } finally {
+      setSavingNotes(false);
+    }
+  }
+
   if (error) {
     return (
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
@@ -399,7 +429,17 @@ export default function OrderDetailPage() {
           <ArrowLeft className="size-4" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{order.orderNumber}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">{order.orderNumber}</h1>
+            {order.orderNumber.startsWith("TMP-") && (
+              <Badge
+                variant="secondary"
+                title="El folio oficial (CM-XXXXXX) se asigna cuando se confirma el pago — este es solo el folio temporal."
+              >
+                Folio pendiente de pago
+              </Badge>
+            )}
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {new Date(order.createdAt).toLocaleString("es-MX")}
           </p>
@@ -866,6 +906,58 @@ export default function OrderDetailPage() {
               <span>{formatCurrency(order.total)}</span>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <SectionIcon icon={StickyNote} index={1} />
+            <div>
+              <CardTitle>Notas internas</CardTitle>
+              <CardDescription>
+                Solo la ve el equipo — nunca el comprador. Útil para detalles de elaboración
+                (ej. una petición especial que dio el cliente por teléfono).
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <Textarea
+            value={adminNotesDraft}
+            onChange={(e) => setAdminNotesDraft(e.target.value)}
+            placeholder="Sin notas todavía..."
+            rows={4}
+            disabled={!canEditAdminNotes}
+          />
+          {order.adminNotesUpdatedAt && (
+            <p className="text-xs text-muted-foreground">
+              Última edición: {new Date(order.adminNotesUpdatedAt).toLocaleString("es-MX")}
+            </p>
+          )}
+          {canEditAdminNotes ? (
+            <div className="flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={savingNotes || adminNotesDraft === (order.adminNotes ?? "")}
+                onClick={() => setAdminNotesDraft(order.adminNotes ?? "")}
+              >
+                Descartar
+              </Button>
+              <Button
+                type="button"
+                disabled={savingNotes || adminNotesDraft === (order.adminNotes ?? "")}
+                onClick={handleSaveAdminNotes}
+              >
+                {savingNotes ? "Guardando..." : "Guardar nota"}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Solo un Admin puede editar esta nota — tu rol solo puede leerla.
+            </p>
+          )}
         </CardContent>
       </Card>
       </div>
