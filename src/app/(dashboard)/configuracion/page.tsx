@@ -18,8 +18,99 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { ApiAppSettings, ApiStoreStatus } from "@/types/settings";
+import type { ApiAppSettings, ApiStoreStatus, ClosedDaySchedule } from "@/types/settings";
 import { cn } from "@/lib/utils";
+
+/** "Todo el día" es la ventana completa — mismo valor que usa el backfill de la migración `AppSettingsClosedDaysHours` para un día que antes solo se cerraba entero. */
+const FULL_DAY: Pick<ClosedDaySchedule, "startTime" | "endTime"> = {
+  startTime: "00:00",
+  endTime: "23:59",
+};
+const DAY_START = "00:00";
+const DAY_END = "23:59";
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTime(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+    .toString()
+    .padStart(2, "0");
+  const m = (minutes % 60).toString().padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+function addMinute(time: string): string {
+  return minutesToTime(timeToMinutes(time) + 1);
+}
+
+function subtractMinute(time: string): string {
+  return minutesToTime(timeToMinutes(time) - 1);
+}
+
+type DayMode = "OPEN" | "CLOSED" | "PARTIAL";
+
+/**
+ * Lo que el admin ve/edita por día — piensa en "¿a qué hora abre/cierra?",
+ * no en "¿qué ventana está cerrada?" (que es como lo guarda la API, ver
+ * `ClosedDaySchedule`). Pedido explícito de la clienta: describir un día
+ * parcial como "abierto de las 6pm a las X" en vez de "cerrado de X a Y" —
+ * mismo dato, forma de leerlo invertida, porque así es como ella piensa su
+ * horario real (ej. "de jueves 6pm a sábado 5pm").
+ */
+interface DayView {
+  mode: DayMode;
+  /** Solo importa en `PARTIAL` — `"00:00"` significa "sin restricción por la mañana". */
+  opensAt: string;
+  /** Solo importa en `PARTIAL` — `"23:59"` significa "sin restricción por la noche". */
+  closesAt: string;
+}
+
+const FULLY_OPEN: DayView = { mode: "OPEN", opensAt: DAY_START, closesAt: DAY_END };
+
+/**
+ * Traduce la ventana *cerrada* que guarda la API a cómo se ve en pantalla.
+ * Solo hay una ventana cerrada por día (restricción real de la API — ver
+ * `ClosedDayScheduleDto` en `carmessievelvet-api`), así que un día parcial
+ * únicamente puede restringir la apertura O el cierre, nunca los dos —
+ * exactamente lo que necesita el caso real ("abre tarde" un día, "cierra
+ * temprano" otro). Una ventana que no toca ninguno de los dos extremos del
+ * día (cerrado a media tarde, con el resto abierto) es un caso que esta
+ * pantalla no puede producir, pero si ya existe en la API (editado a mano)
+ * se muestra igual, sin inventar un valor.
+ */
+function viewFromSchedule(schedule: ClosedDaySchedule | undefined): DayView {
+  if (!schedule) return FULLY_OPEN;
+  if (schedule.startTime === DAY_START && schedule.endTime === DAY_END) {
+    return { mode: "CLOSED", opensAt: DAY_START, closesAt: DAY_END };
+  }
+  if (schedule.startTime === DAY_START) {
+    // Cerrado de medianoche hasta `endTime` -> abre justo después.
+    return { mode: "PARTIAL", opensAt: addMinute(schedule.endTime), closesAt: DAY_END };
+  }
+  if (schedule.endTime === DAY_END) {
+    // Cerrado desde `startTime` hasta medianoche -> cierra justo antes.
+    return { mode: "PARTIAL", opensAt: DAY_START, closesAt: subtractMinute(schedule.startTime) };
+  }
+  // No toca ningún extremo del día — no se puede editar como "abre/cierra"
+  // sin perder información, se muestra tal cual llegó.
+  return { mode: "PARTIAL", opensAt: schedule.endTime, closesAt: schedule.startTime };
+}
+
+/** El inverso de `viewFromSchedule` — `null` cuando el admin restringió los dos lados a la vez, algo que una sola ventana cerrada no puede representar. */
+function scheduleFromView(day: number, view: DayView): ClosedDaySchedule | undefined | null {
+  if (view.mode === "OPEN") return undefined;
+  if (view.mode === "CLOSED") return { day, ...FULL_DAY };
+
+  const opensRestricted = view.opensAt !== DAY_START;
+  const closesRestricted = view.closesAt !== DAY_END;
+  if (opensRestricted && closesRestricted) return null;
+  if (opensRestricted) return { day, startTime: DAY_START, endTime: subtractMinute(view.opensAt) };
+  if (closesRestricted) return { day, startTime: addMinute(view.closesAt), endTime: DAY_END };
+  return undefined; // "Horario limitado" sin restringir ningún lado todavía = abierto todo el día.
+}
 
 // Mismos límites que valida la API en `POST /v1/settings/logo` (ver
 // `image.util.ts` en carmessievelvet-api) — se replican acá solo para
@@ -49,7 +140,8 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<ApiAppSettings | null>(null);
   const [status, setStatus] = useState<ApiStoreStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [closedDays, setClosedDays] = useState<Set<number>>(new Set());
+  const [dayViews, setDayViews] = useState<Record<number, DayView>>({});
+  const [originalDayViews, setOriginalDayViews] = useState<Record<number, DayView>>({});
   const [saving, setSaving] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [savingName, setSavingName] = useState(false);
@@ -64,7 +156,12 @@ export default function SettingsPage() {
         if (cancelled) return;
         setSettings(loadedSettings);
         setStatus(loadedStatus);
-        setClosedDays(new Set(loadedSettings.closedDays));
+        const views: Record<number, DayView> = {};
+        for (let d = 0; d <= 6; d++) {
+          views[d] = viewFromSchedule(loadedSettings.closedDays.find((s) => s.day === d));
+        }
+        setDayViews(views);
+        setOriginalDayViews(views);
         setDisplayName(loadedSettings.displayName);
       })
       .catch((err: unknown) => {
@@ -81,24 +178,29 @@ export default function SettingsPage() {
     };
   }, [router]);
 
-  function toggleDay(day: number) {
-    setClosedDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(day)) next.delete(day);
-      else next.add(day);
-      return next;
-    });
+  function setDayView(day: number, view: DayView) {
+    setDayViews((prev) => ({ ...prev, [day]: view }));
   }
 
-  const isDirty = useMemo(() => {
-    if (!settings) return false;
-    const current = [...closedDays].sort().join(",");
-    const original = [...settings.closedDays].sort().join(",");
-    return current !== original;
-  }, [closedDays, settings]);
+  const isDirty = useMemo(
+    () => JSON.stringify(dayViews) !== JSON.stringify(originalDayViews),
+    [dayViews, originalDayViews]
+  );
 
   async function handleSave() {
-    if (closedDays.size === 7) {
+    const closedDays: ClosedDaySchedule[] = [];
+    for (let day = 0; day <= 6; day++) {
+      const view = dayViews[day] ?? FULLY_OPEN;
+      const schedule = scheduleFromView(day, view);
+      if (schedule === null) {
+        toast.error(
+          `${DAYS.find((d) => d.value === day)?.label}: hoy solo se puede restringir la hora de apertura o la de cierre en un mismo día, no las dos a la vez.`
+        );
+        return;
+      }
+      if (schedule) closedDays.push(schedule);
+    }
+    if (closedDays.length === 7) {
       toast.error("No puedes cerrar los 7 días de la semana.");
       return;
     }
@@ -106,9 +208,15 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       const updated = await settingsService.updateAppSettings({
-        closedDays: [...closedDays],
+        closedDays,
       });
       setSettings(updated);
+      const views: Record<number, DayView> = {};
+      for (let d = 0; d <= 6; d++) {
+        views[d] = viewFromSchedule(updated.closedDays.find((s) => s.day === d));
+      }
+      setDayViews(views);
+      setOriginalDayViews(views);
       const refreshedStatus = await settingsService.getStoreStatus();
       setStatus(refreshedStatus);
       toast.success("Calendario de pedidos actualizado.");
@@ -302,33 +410,112 @@ export default function SettingsPage() {
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="flex flex-col gap-2">
               {DAYS.map((day) => {
-                const isClosed = closedDays.has(day.value);
+                const view = dayViews[day.value] ?? FULLY_OPEN;
+                const isOpen = view.mode === "OPEN";
+                const isClosed = view.mode === "CLOSED";
                 return (
-                  <button
+                  <div
                     key={day.value}
-                    type="button"
-                    onClick={() => toggleDay(day.value)}
                     className={cn(
-                      "flex flex-col items-center gap-1 rounded-lg border px-3 py-3 text-sm transition-colors",
+                      "flex flex-col gap-2 rounded-lg border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between",
                       isClosed
-                        ? "border-destructive/40 bg-destructive/5 text-destructive"
-                        : "border-primary/40 bg-primary/5 text-primary"
+                        ? "border-destructive/40 bg-destructive/5"
+                        : isOpen
+                          ? "border-primary/40 bg-primary/5"
+                          : "border-amber-500/40 bg-amber-500/5"
                     )}
                   >
-                    <span className="font-medium">{day.label}</span>
-                    <span className="text-xs">{isClosed ? "Cerrado" : "Abierto"}</span>
-                  </button>
+                    <div className="flex items-center gap-3">
+                      <span className="w-20 shrink-0 text-left text-sm font-medium">{day.label}</span>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setDayView(day.value, FULLY_OPEN)}
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                            isOpen
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border text-muted-foreground hover:border-ring"
+                          )}
+                        >
+                          Abierto
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDayView(
+                              day.value,
+                              view.mode === "PARTIAL"
+                                ? view
+                                : { mode: "PARTIAL", opensAt: DAY_START, closesAt: DAY_END }
+                            )
+                          }
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                            view.mode === "PARTIAL"
+                              ? "border-amber-500 bg-amber-500 text-white"
+                              : "border-border text-muted-foreground hover:border-ring"
+                          )}
+                        >
+                          Horario limitado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDayView(day.value, { mode: "CLOSED", opensAt: DAY_START, closesAt: DAY_END })}
+                          className={cn(
+                            "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                            isClosed
+                              ? "border-destructive bg-destructive text-white"
+                              : "border-border text-muted-foreground hover:border-ring"
+                          )}
+                        >
+                          Cerrado
+                        </button>
+                      </div>
+                    </div>
+
+                    {view.mode === "PARTIAL" && (
+                      <div className="flex items-center gap-2 pl-[5.5rem] sm:pl-0">
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          Abre a las
+                          <input
+                            type="time"
+                            value={view.opensAt}
+                            onChange={(e) => setDayView(day.value, { ...view, opensAt: e.target.value })}
+                            className="rounded border border-input bg-background px-1.5 py-1 text-xs"
+                          />
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          Cierra a las
+                          <input
+                            type="time"
+                            value={view.closesAt}
+                            onChange={(e) => setDayView(day.value, { ...view, closesAt: e.target.value })}
+                            className="rounded border border-input bg-background px-1.5 py-1 text-xs"
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
+            <p className="text-xs text-muted-foreground">
+              &quot;Horario limitado&quot; deja abierto solo un rango del día — restringe la hora de
+              apertura (ej. &quot;Abre a las&quot; 6:00pm) <strong>o</strong> la de cierre (ej.
+              &quot;Cierra a las&quot; 5:00pm), no las dos a la vez en el mismo día. Para el ejemplo
+              de jueves 6pm a sábado 5pm: jueves &quot;Abre a las&quot; 18:00, viernes
+              &quot;Abierto&quot;, sábado &quot;Cierra a las&quot; 17:00, el resto de la semana
+              &quot;Cerrado&quot;.
+            </p>
             <div className="flex items-center justify-end gap-3">
               <Button
                 type="button"
                 variant="outline"
                 disabled={!isDirty || saving}
-                onClick={() => setClosedDays(new Set(settings.closedDays))}
+                onClick={() => setDayViews(originalDayViews)}
               >
                 Descartar cambios
               </Button>
