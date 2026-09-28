@@ -33,7 +33,7 @@ export default function StoreHeroPage() {
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([heroService.getHeroes(), catalogService.getCategories()])
+    Promise.all([heroService.getHeroes("MAIN"), catalogService.getCategories()])
       .then(([loadedHeroes, loadedCategories]) => {
         if (cancelled) return;
         setHeroes(loadedHeroes);

@@ -30,6 +30,8 @@ interface NavRoute {
 const NAV_ROUTES: NavRoute[] = [
   { href: "/", roles: FULL_ACCESS_ROLES },
   { href: "/inicio", roles: FULL_ACCESS_ROLES },
+  { href: "/banner", roles: FULL_ACCESS_ROLES },
+  { href: "/testimonios", roles: FULL_ACCESS_ROLES },
   { href: "/productos", roles: [...FULL_ACCESS_ROLES, "MARKETING"] },
   { href: "/categorias", roles: FULL_ACCESS_ROLES },
   { href: "/ordenes", roles: [...FULL_ACCESS_ROLES, "SALES"] },
