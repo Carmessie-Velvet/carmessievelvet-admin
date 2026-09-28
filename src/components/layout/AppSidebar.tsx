@@ -7,6 +7,7 @@ import {
   Image as ImageIcon,
   Layers3,
   LayoutDashboard,
+  MessageSquareQuote,
   Package,
   Percent,
   Settings,
@@ -37,6 +38,8 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/inicio", label: "Inicio", icon: ImageIcon },
+  { href: "/banner", label: "Banner", icon: ImageIcon },
+  { href: "/testimonios", label: "Testimonios", icon: MessageSquareQuote },
   { href: "/productos", label: "Productos", icon: ShoppingBag },
   { href: "/categorias", label: "Categorías", icon: Layers3 },
   { href: "/ordenes", label: "Órdenes", icon: Package },

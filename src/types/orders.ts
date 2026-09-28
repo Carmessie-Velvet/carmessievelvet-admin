@@ -127,7 +127,21 @@ export interface OrderItem {
 
 export interface ApiOrder {
   id: string;
+  /**
+   * Empieza como el mismo folio temporal aleatorio `TMP-XXXXXXXX` que
+   * `temporaryOrderNumber` (2026-09-24) — se promueve al folio oficial
+   * `CM-XXXXXX`, consecutivo y sin huecos, solo cuando el pago se confirma
+   * (así un checkout abandonado o un pago fallido nunca quema un número).
+   * Una orden real ya pagada siempre tiene aquí el folio `CM-`.
+   */
   orderNumber: string;
+  /**
+   * El folio temporal original — nunca se sobreescribe, a diferencia de
+   * `orderNumber` arriba, así que sigue siendo un registro permanente y
+   * buscable aunque `orderNumber` ya se haya promovido al folio oficial.
+   * `undefined` en una orden de antes de que este campo existiera.
+   */
+  temporaryOrderNumber?: string;
   status: OrderStatus;
   userId?: string;
   email: string;
@@ -166,6 +180,17 @@ export interface ApiOrder {
   /** `undefined` salvo que el comprador haya mandado una solicitud de devolución post-entrega. */
   returnRequest?: ApiReturnRequest | null;
   notes?: string;
+  /**
+   * Nota interna del backoffice (2026-09-24) — distinta de `notes` arriba,
+   * que llena el comprador en checkout y que la API le agrega sistema
+   * (`OVERSELL`, `payment_failed`); `adminNotes` es de uso exclusivo del
+   * equipo, nunca visible para el comprador. Cualquier rol de backoffice
+   * puede leerla, pero solo ADMIN/SUPER_ADMIN puede escribirla
+   * (`PATCH /orders/:id/admin-notes`).
+   */
+  adminNotes?: string;
+  adminNotesUpdatedAt?: string;
+  adminNotesUpdatedByUserId?: string;
   createdAt: string;
   updatedAt: string;
 }
