@@ -191,9 +191,47 @@ export interface ApiOrder {
   adminNotes?: string;
   adminNotesUpdatedAt?: string;
   adminNotesUpdatedByUserId?: string;
+  /**
+   * Bitácora de correcciones de talla/color hechas por el backoffice
+   * (`PATCH /orders/:id/items/:itemId/variant`), del más viejo al más nuevo.
+   * Solo viene en lecturas/escrituras de una orden — `undefined` en el
+   * listado paginado `GET /orders`, y el comprador nunca la ve.
+   */
+  variantChanges?: OrderItemVariantChange[];
   createdAt: string;
   updatedAt: string;
 }
+
+/** Una corrección de talla/color — en un set, una fila por cada prenda que cambió. */
+export interface OrderItemVariantChange {
+  id: string;
+  orderItemId: string;
+  /** Solo en una línea de set — cuál prenda cambió. */
+  orderItemSelectionId?: string | null;
+  componentName?: string | null;
+  previousSize?: string | null;
+  previousColor?: string | null;
+  newSize?: string | null;
+  newColor?: string | null;
+  reason: string;
+  changedByUserId?: string | null;
+  createdAt: string;
+}
+
+/**
+ * Body de `PATCH /orders/:id/items/:itemId/variant`. Una línea simple manda
+ * `size` (+ `color` si esa talla ofrece varios); una línea de set manda
+ * `selections` solo con las prendas que cambian. Nunca ambos.
+ */
+export interface ChangeOrderItemVariantPayload {
+  size?: string;
+  color?: string;
+  selections?: { componentId: string; size: string; color?: string }[];
+  reason: string;
+}
+
+/** Estatus en los que la API todavía deja corregir la talla/color de una línea sobre pedido. */
+export const VARIANT_CHANGE_ELIGIBLE_STATUSES: OrderStatus[] = ["PAID", "PROCESSING"];
 
 /**
  * The only manual status an order can move to next, mirroring the API's

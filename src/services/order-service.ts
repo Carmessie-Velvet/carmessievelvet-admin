@@ -3,6 +3,7 @@ import type { PaginatedResult } from "@/types/catalog";
 import type {
   ApiAdminOrderShipment,
   ApiOrder,
+  ChangeOrderItemVariantPayload,
   ApiOrderShipment,
   OrderStatus,
   RefundMode,
@@ -65,6 +66,17 @@ export interface OrderService {
    * MARKETING/SALES aunque sí puedan leer la nota en el resto de las rutas).
    */
   updateAdminNotes(id: string, adminNotes: string | null): Promise<ApiOrder>;
+  /**
+   * Corrige la talla/color de una línea sobre pedido (`madeToOrder`) mientras
+   * la orden está `PAID`/`PROCESSING` — el cliente se equivocó y avisó. No
+   * toca precio, inventario ni estatus, ni manda correo; deja una fila en
+   * `ApiOrder.variantChanges`. Cualquier rol de backoffice puede llamarlo.
+   */
+  changeItemVariant(
+    orderId: string,
+    itemId: string,
+    payload: ChangeOrderItemVariantPayload
+  ): Promise<ApiOrder>;
 }
 
 export class RestOrderService implements OrderService {
@@ -165,6 +177,17 @@ export class RestOrderService implements OrderService {
     return apiFetch<ApiOrder>(`/v1/orders/${id}/admin-notes`, {
       method: "PATCH",
       body: JSON.stringify({ adminNotes }),
+    });
+  }
+
+  async changeItemVariant(
+    orderId: string,
+    itemId: string,
+    payload: ChangeOrderItemVariantPayload
+  ): Promise<ApiOrder> {
+    return apiFetch<ApiOrder>(`/v1/orders/${orderId}/items/${itemId}/variant`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
     });
   }
 }
