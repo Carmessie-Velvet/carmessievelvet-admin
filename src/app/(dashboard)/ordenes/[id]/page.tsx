@@ -8,9 +8,11 @@ import {
   ArrowLeft,
   Download,
   HelpCircle,
+  History,
   Loader2,
   MapPin,
   Package,
+  Pencil,
   Receipt,
   RefreshCw,
   StickyNote,
@@ -24,6 +26,7 @@ import { useAuth } from "@/context/auth-context";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RefundDialog, type RefundPayload } from "@/components/orders/RefundDialog";
+import { ChangeVariantDialog } from "@/components/orders/ChangeVariantDialog";
 import { formatCurrency } from "@/lib/format-currency";
 import {
   CANCELLABLE_STATUSES,
@@ -33,8 +36,10 @@ import {
   REFUND_MODE_LABEL,
   RETURN_REQUEST_STATUS_LABEL,
   statusBadgeVariant,
+  VARIANT_CHANGE_ELIGIBLE_STATUSES,
   type ApiAdminOrderShipment,
   type ApiOrder,
+  type OrderItem,
 } from "@/types/orders";
 import type { ApiEnviatodoPackage, ApiShipmentQuote } from "@/types/shipping";
 import { Badge } from "@/components/ui/badge";
@@ -151,6 +156,7 @@ export default function OrderDetailPage() {
   );
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [approveReturnDialogOpen, setApproveReturnDialogOpen] = useState(false);
+  const [variantItem, setVariantItem] = useState<OrderItem | null>(null);
 
   const [packages, setPackages] = useState<ApiEnviatodoPackage[] | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -876,6 +882,18 @@ export default function OrderDetailPage() {
                           {item.color ? ` (${item.color})` : ""}
                         </>
                       )}
+                      {item.madeToOrder && VARIANT_CHANGE_ELIGIBLE_STATUSES.includes(order.status) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          className="mt-1.5 flex"
+                          onClick={() => setVariantItem(item)}
+                        >
+                          <Pencil className="size-3" />
+                          Cambiar talla
+                        </Button>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{item.quantity}</TableCell>
                     <TableCell>{formatCurrency(item.unitFinalPrice)}</TableCell>
@@ -960,6 +978,44 @@ export default function OrderDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {order.variantChanges && order.variantChanges.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <SectionIcon icon={History} index={2} />
+              <div>
+                <CardTitle>Cambios de talla</CardTitle>
+                <CardDescription>
+                  Bitácora de correcciones hechas a esta orden — la clienta solo ve la talla final.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {order.variantChanges.map((change) => {
+              const itemName =
+                order.items.find((i) => i.id === change.orderItemId)?.productName ?? "Artículo";
+              const describe = (size?: string | null, color?: string | null) =>
+                `${size ?? "—"}${color ? ` (${color})` : ""}`;
+              return (
+                <div key={change.id} className="rounded-lg border border-border px-3 py-2 text-sm">
+                  <p className="font-medium">
+                    {itemName}
+                    {change.componentName ? ` — ${change.componentName}` : ""}:{" "}
+                    {describe(change.previousSize, change.previousColor)} →{" "}
+                    {describe(change.newSize, change.newColor)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{change.reason}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {new Date(change.createdAt).toLocaleString("es-MX")}
+                  </p>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
       </div>
 
       <aside className="lg:sticky lg:top-6">
@@ -967,6 +1023,17 @@ export default function OrderDetailPage() {
       </aside>
       </div>
 
+      {variantItem && (
+        <ChangeVariantDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setVariantItem(null);
+          }}
+          order={order}
+          item={variantItem}
+          onChanged={(updated) => setOrder(updated)}
+        />
+      )}
       <RefundDialog
         open={cancelDialogOpen}
         onOpenChange={setCancelDialogOpen}
