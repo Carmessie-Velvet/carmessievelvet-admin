@@ -22,7 +22,6 @@ import {
 import { orderService } from "@/services/order-service";
 import { enviatodoService } from "@/services/enviatodo-service";
 import { ApiError } from "@/lib/api-client";
-import { useAuth } from "@/context/auth-context";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RefundDialog, type RefundPayload } from "@/components/orders/RefundDialog";
@@ -137,7 +136,6 @@ function StatusGuideCard() {
 
 export default function OrderDetailPage() {
   const router = useRouter();
-  const { user } = useAuth();
   const { prompt } = useConfirmDialog();
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<ApiOrder | null>(null);
@@ -147,13 +145,6 @@ export default function OrderDetailPage() {
   const [busy, setBusy] = useState(false);
   const [adminNotesDraft, setAdminNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
-  // Cualquier rol de backoffice ya puede LEER `adminNotes` (viene con la
-  // orden), pero solo ADMIN/SUPER_ADMIN puede escribirla — la API 403s el
-  // PATCH para MARKETING/SALES, así que el textarea se deja de solo lectura
-  // acá mismo en vez de dejar que fallen al guardar.
-  const canEditAdminNotes = (user?.roles ?? []).some(
-    (role) => role === "ADMIN" || role === "SUPER_ADMIN"
-  );
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [approveReturnDialogOpen, setApproveReturnDialogOpen] = useState(false);
   const [variantItem, setVariantItem] = useState<OrderItem | null>(null);
@@ -946,36 +937,29 @@ export default function OrderDetailPage() {
             onChange={(e) => setAdminNotesDraft(e.target.value)}
             placeholder="Sin notas todavía..."
             rows={4}
-            disabled={!canEditAdminNotes}
           />
           {order.adminNotesUpdatedAt && (
             <p className="text-xs text-muted-foreground">
               Última edición: {new Date(order.adminNotesUpdatedAt).toLocaleString("es-MX")}
             </p>
           )}
-          {canEditAdminNotes ? (
-            <div className="flex items-center justify-end gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={savingNotes || adminNotesDraft === (order.adminNotes ?? "")}
-                onClick={() => setAdminNotesDraft(order.adminNotes ?? "")}
-              >
-                Descartar
-              </Button>
-              <Button
-                type="button"
-                disabled={savingNotes || adminNotesDraft === (order.adminNotes ?? "")}
-                onClick={handleSaveAdminNotes}
-              >
-                {savingNotes ? "Guardando..." : "Guardar nota"}
-              </Button>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Solo un Admin puede editar esta nota — tu rol solo puede leerla.
-            </p>
-          )}
+          <div className="flex items-center justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={savingNotes || adminNotesDraft === (order.adminNotes ?? "")}
+              onClick={() => setAdminNotesDraft(order.adminNotes ?? "")}
+            >
+              Descartar
+            </Button>
+            <Button
+              type="button"
+              disabled={savingNotes || adminNotesDraft === (order.adminNotes ?? "")}
+              onClick={handleSaveAdminNotes}
+            >
+              {savingNotes ? "Guardando..." : "Guardar nota"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

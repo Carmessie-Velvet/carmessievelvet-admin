@@ -185,8 +185,8 @@ export interface ApiOrder {
    * que llena el comprador en checkout y que la API le agrega sistema
    * (`OVERSELL`, `payment_failed`); `adminNotes` es de uso exclusivo del
    * equipo, nunca visible para el comprador. Cualquier rol de backoffice
-   * puede leerla, pero solo ADMIN/SUPER_ADMIN puede escribirla
-   * (`PATCH /orders/:id/admin-notes`).
+   * puede leerla y escribirla (`PATCH /orders/:id/admin-notes`) — antes de
+   * 2026-10-08 la escritura era solo ADMIN/SUPER_ADMIN.
    */
   adminNotes?: string;
   adminNotesUpdatedAt?: string;
