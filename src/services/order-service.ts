@@ -62,8 +62,8 @@ export interface OrderService {
   /**
    * Agrega/edita/borra la nota interna de la orden — `null` (o vacío) la
    * limpia, cualquier otro string la reemplaza. Un solo endpoint cubre los
-   * tres casos. Solo ADMIN/SUPER_ADMIN puede llamarlo (la API 403s a
-   * MARKETING/SALES aunque sí puedan leer la nota en el resto de las rutas).
+   * tres casos. Cualquier rol de backoffice (Admin, Super Admin, Ventas,
+   * Marketing) puede llamarlo.
    */
   updateAdminNotes(id: string, adminNotes: string | null): Promise<ApiOrder>;
   /**
