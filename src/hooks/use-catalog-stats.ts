@@ -26,13 +26,15 @@ export function useCatalogStats(router: ReturnType<typeof useRouter>) {
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([catalogService.getProducts(), catalogService.getCategories()])
+    // "all": un producto inactivo ya no es invisible para el admin — cuenta
+    // en el total, pero "sin stock" solo importa para lo que sí se vende.
+    Promise.all([catalogService.getProducts("all"), catalogService.getCategories()])
       .then(([products, categories]) => {
         if (cancelled) return;
         setCatalog({
           totalProducts: products.length,
           activeProducts: products.filter((p) => p.active).length,
-          outOfStock: products.filter((p) => p.totalStock === 0).length,
+          outOfStock: products.filter((p) => p.active && p.totalStock === 0).length,
           categories: categories.length,
         });
       })

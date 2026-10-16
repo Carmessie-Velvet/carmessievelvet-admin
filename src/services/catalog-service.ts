@@ -10,6 +10,8 @@ import type {
   UpdateApiProductPayload,
 } from "@/types/catalog";
 
+export type ProductStatusFilter = "active" | "inactive" | "all";
+
 /**
  * The real product catalog. `getProducts`/`getCategories` back the read-only
  * list at `/productos`; `createProduct`/`uploadProductImages` back the
@@ -18,7 +20,8 @@ import type {
  * by `sku`, not `id` — the API switched to SKU as the URL identifier.
  */
 export interface CatalogService {
-  getProducts(): Promise<ApiProduct[]>;
+  /** Default `"active"` (lo mismo que hace la API sola); `"all"` junta activos e inactivos. */
+  getProducts(status?: ProductStatusFilter): Promise<ApiProduct[]>;
   getProduct(sku: string): Promise<ApiProduct>;
   getCategories(): Promise<ApiCategory[]>;
   createCategory(payload: CreateApiCategoryPayload): Promise<ApiCategory>;
@@ -42,13 +45,22 @@ export interface CatalogService {
 }
 
 export class RestCatalogService implements CatalogService {
-  async getProducts(): Promise<ApiProduct[]> {
+  async getProducts(status: ProductStatusFilter = "active"): Promise<ApiProduct[]> {
     // Admin's catalog is small for now; one page of the API's max page
     // size (100) covers it without needing pagination UI yet.
-    const result = await apiFetch<PaginatedResult<ApiProduct>>(
-      "/v1/products?limit=100"
-    );
-    return result.items;
+    // `GET /products` only returns active products unless `active=false` is
+    // sent explicitly, and has no "both" value — so "all" is two calls.
+    const fetchByActive = async (active: boolean) => {
+      const result = await apiFetch<PaginatedResult<ApiProduct>>(
+        `/v1/products?limit=100&active=${active}`
+      );
+      return result.items;
+    };
+
+    if (status === "active") return fetchByActive(true);
+    if (status === "inactive") return fetchByActive(false);
+    const [active, inactive] = await Promise.all([fetchByActive(true), fetchByActive(false)]);
+    return [...active, ...inactive];
   }
 
   async getProduct(sku: string): Promise<ApiProduct> {
