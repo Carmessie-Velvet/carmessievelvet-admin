@@ -80,6 +80,14 @@ function matchesQuery(product: ApiProduct, query: string): boolean {
   return haystack.includes(query.toLowerCase());
 }
 
+type StatusFilter = "ACTIVE" | "INACTIVE" | "ALL";
+
+const STATUS_FILTER_LABEL: Record<StatusFilter, string> = {
+  ACTIVE: "Activos",
+  INACTIVE: "Inactivos",
+  ALL: "Todos los estados",
+};
+
 export default function ProductsPage() {
   const router = useRouter();
   const { catalog } = useCatalogStats(router);
@@ -88,12 +96,15 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  // Los inactivos no se venden en la tienda pero el admin sí tiene que poder
+  // verlos (y reactivarlos) — se cargan todos una vez y se filtra acá.
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ACTIVE");
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([catalogService.getProducts(), catalogService.getCategories()])
+    Promise.all([catalogService.getProducts("all"), catalogService.getCategories()])
       .then(([loadedProducts, loadedCategories]) => {
         if (cancelled) return;
         setProducts(loadedProducts);
@@ -118,13 +129,15 @@ export default function ProductsPage() {
   const filtered = useMemo(() => {
     if (!products) return null;
     return products.filter((product) => {
+      if (statusFilter === "ACTIVE" && !product.active) return false;
+      if (statusFilter === "INACTIVE" && product.active) return false;
       if (categoryFilter !== "ALL" && product.category.id !== categoryFilter) {
         return false;
       }
       if (!query.trim()) return true;
       return matchesQuery(product, query.trim());
     });
-  }, [products, query, categoryFilter]);
+  }, [products, query, categoryFilter, statusFilter]);
 
   const pageCount = filtered ? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)) : 1;
   // Igual que en /ordenes: si la búsqueda deja `page` apuntando a una
@@ -139,7 +152,7 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Productos</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {products
-              ? `${products.length} producto${products.length === 1 ? "" : "s"} en el catálogo.`
+              ? `${products.length} producto${products.length === 1 ? "" : "s"} en el catálogo (${products.filter((p) => p.active).length} activos, ${products.filter((p) => !p.active).length} inactivos).`
               : error
                 ? "No se pudo cargar el catálogo."
                 : "Cargando catálogo desde la API..."}
@@ -213,6 +226,24 @@ export default function ProductsPage() {
               {categories.map((category) => (
                 <SelectItem key={category.id} value={category.id}>
                   {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => {
+              setStatusFilter((v as StatusFilter) ?? "ACTIVE");
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue>{(value: StatusFilter) => STATUS_FILTER_LABEL[value]}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(STATUS_FILTER_LABEL) as StatusFilter[]).map((status) => (
+                <SelectItem key={status} value={status}>
+                  {STATUS_FILTER_LABEL[status]}
                 </SelectItem>
               ))}
             </SelectContent>
