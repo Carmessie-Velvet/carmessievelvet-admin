@@ -106,7 +106,7 @@ const STATUS_GUIDE: { title: string; body: string }[] = [
   },
   {
     title: "Cancelada / Reembolsada",
-    body: "Solo se llega aquí desde el botón \"Cancelar orden\" — nunca cambia sola.",
+    body: "Solo se llega aquí desde el botón \"Cancelar orden\" (o \"Reembolsar\", si el pedido ya salió) — nunca cambia sola.",
   },
 ];
 
@@ -326,10 +326,14 @@ export default function OrderDetailPage() {
       const updated = await orderService.cancelOrder(order.id, reason, { refundMode, amount });
       setOrder(updated);
       toast.success(
-        order.status === "PENDING" ? "Orden cancelada." : "Orden cancelada y reembolsada."
+        order.status === "PENDING"
+          ? "Orden cancelada."
+          : refundOnly
+            ? "Pedido reembolsado."
+            : "Orden cancelada y reembolsada."
       );
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "No se pudo cancelar la orden.");
+      toast.error(err instanceof ApiError ? err.message : refundOnly ? "No se pudo reembolsar el pedido." : "No se pudo cancelar la orden.");
       throw err;
     }
   }
@@ -414,6 +418,9 @@ export default function OrderDetailPage() {
   const next = NEXT_MANUAL_STATUS[order.status];
   const showManualAdvance = Boolean(next) && !automated;
   const cancellable = CANCELLABLE_STATUSES.includes(order.status);
+  // Una orden ya enviada/entregada no se "cancela" — la API solo deja
+  // reembolsarla (total o parcial), así que el botón y el diálogo lo dicen.
+  const refundOnly = order.status === "SHIPPED" || order.status === "DELIVERED";
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -503,7 +510,7 @@ export default function OrderDetailPage() {
               disabled={busy}
               onClick={() => setCancelDialogOpen(true)}
             >
-              Cancelar orden
+              {refundOnly ? "Reembolsar" : "Cancelar orden"}
             </Button>
           )}
           {!next && !cancellable && (
@@ -1022,9 +1029,13 @@ export default function OrderDetailPage() {
         open={cancelDialogOpen}
         onOpenChange={setCancelDialogOpen}
         order={order}
-        title="Cancelar orden"
-        description="Esta acción no se puede deshacer."
-        confirmLabel="Cancelar orden"
+        title={refundOnly ? "Reembolsar pedido" : "Cancelar orden"}
+        description={
+          refundOnly
+            ? "El pedido ya salió: no se cancela, solo se devuelve dinero vía Stripe. Esta acción no se puede deshacer."
+            : "Esta acción no se puede deshacer."
+        }
+        confirmLabel={refundOnly ? "Reembolsar" : "Cancelar orden"}
         destructive
         onConfirm={handleCancelConfirm}
       />
