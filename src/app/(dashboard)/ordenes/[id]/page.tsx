@@ -13,6 +13,7 @@ import {
   MapPin,
   Package,
   Pencil,
+  Printer,
   Receipt,
   RefreshCw,
   StickyNote,
@@ -98,11 +99,11 @@ const STATUS_GUIDE: { title: string; body: string }[] = [
   },
   {
     title: "Guía generada (solo EXPRESS)",
-    body: "Ya se creó la guía de Estafeta. Descarga el PDF, imprímelo y entrega el paquete cuando pasen a recolectarlo — de aquí en adelante ya no hay botones manuales para esta orden.",
+    body: "Ya se creó la guía de Estafeta. Descarga el PDF, imprímelo y entrega el paquete cuando pasen a recolectarlo — de aquí en adelante el estado avanza solo. Si algo falla con Enviatodo, queda un botón manual de respaldo en \"Estado del pedido\".",
   },
   {
     title: "Enviada / Entregada",
-    body: "Para EXPRESS esto lo actualiza solo el sistema según lo que reporte Estafeta (puede tardar hasta 30 min) — no hace falta ni se puede tocar nada. Para STANDARD lo marcas tú a mano con el botón de arriba.",
+    body: "Para EXPRESS esto lo actualiza solo el sistema según lo que reporte Estafeta (puede tardar hasta 30 min) — normalmente no hace falta tocar nada (si algo falla, hay un botón manual de respaldo arriba). Para STANDARD lo marcas tú a mano con el botón de arriba.",
   },
   {
     title: "Cancelada / Reembolsada",
@@ -136,7 +137,7 @@ function StatusGuideCard() {
 
 export default function OrderDetailPage() {
   const router = useRouter();
-  const { prompt } = useConfirmDialog();
+  const { prompt, confirm } = useConfirmDialog();
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -302,6 +303,22 @@ export default function OrderDetailPage() {
     const next = NEXT_MANUAL_STATUS[order.status];
     if (!next) return;
 
+    // Una orden con envío automatizado avanza sola (guía de Enviatodo +
+    // cron de Estafeta) — este botón existe solo por si ese flujo falla, así
+    // que se confirma antes de saltárselo.
+    if (isAutomatedShipping(order.shippingMethod)) {
+      const confirmed = await confirm({
+        title: `¿Marcar como ${ORDER_STATUS_LABEL[next]} a mano?`,
+        description:
+          `Este pedido es de envío automatizado: normalmente su estado avanza solo según Enviatodo/Estafeta. ` +
+          `Úsalo solo si algo falló y no se puede actualizar de otra forma. ` +
+          `Al cambiarlo se le envía al comprador el correo de "${ORDER_STATUS_LABEL[next]}" y queda registrado en el historial.`,
+        confirmLabel: `Sí, marcar como ${ORDER_STATUS_LABEL[next]}`,
+        cancelLabel: "Volver",
+      });
+      if (!confirmed) return;
+    }
+
     setBusy(true);
     try {
       const updated = await orderService.updateOrderStatus(
@@ -448,6 +465,15 @@ export default function OrderDetailPage() {
             {new Date(order.createdAt).toLocaleString("es-MX")}
           </p>
         </div>
+        <Link
+          href={`/ordenes/${order.id}/imprimir`}
+          target="_blank"
+          rel="noopener"
+          className={cn(buttonVariants({ variant: "outline" }), "gap-1.5")}
+        >
+          <Printer className="size-4" />
+          Imprimir resumen
+        </Link>
         <Badge variant={statusBadgeVariant(order.status)}>
           {ORDER_STATUS_LABEL[order.status]}
         </Badge>
@@ -499,9 +525,37 @@ export default function OrderDetailPage() {
           )}
           {automated && (order.status === "PROCESSING" || order.status === "SHIPPED") && (
             <p className="w-full text-sm text-muted-foreground">
-              El estatus avanza automáticamente según Estafeta (se actualiza cada ~30 min) — no hay
-              acción manual disponible.
+              El estatus avanza automáticamente según Estafeta (se actualiza cada ~30 min).
             </p>
+          )}
+          {automated && next && (
+            <div className="flex w-full flex-col gap-3 rounded-lg border border-dashed border-border p-3">
+              <p className="text-xs text-muted-foreground">
+                Solo si algo falla con Enviatodo/Estafeta y el estado no se puede actualizar solo:
+                puedes avanzarlo a mano.
+              </p>
+              {next === "SHIPPED" && (
+                <div className="flex flex-wrap gap-3">
+                  <Input
+                    value={trackingNumber}
+                    onChange={(e) => setTrackingNumber(e.target.value)}
+                    placeholder="Número de rastreo (opcional)"
+                    className="max-w-56"
+                  />
+                  <Input
+                    value={carrier}
+                    onChange={(e) => setCarrier(e.target.value)}
+                    placeholder="Paquetería (opcional)"
+                    className="max-w-56"
+                  />
+                </div>
+              )}
+              <div>
+                <Button type="button" variant="outline" disabled={busy} onClick={advanceStatus}>
+                  Marcar como {ORDER_STATUS_LABEL[next]} (manual)
+                </Button>
+              </div>
+            </div>
           )}
           {cancellable && (
             <Button
