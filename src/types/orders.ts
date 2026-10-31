@@ -198,6 +198,13 @@ export interface ApiOrder {
    * listado paginado `GET /orders`, y el comprador nunca la ve.
    */
   variantChanges?: OrderItemVariantChange[];
+  /**
+   * Bitácora de correcciones del correo del comprador en una orden de
+   * invitado (`PATCH /orders/:id/email`), de la más vieja a la más nueva.
+   * Viene en `GET /orders/:id` y en la respuesta de ese `PATCH` — `undefined`
+   * en el listado paginado `GET /orders`, y el comprador nunca la ve.
+   */
+  emailChanges?: OrderEmailChange[];
   createdAt: string;
   updatedAt: string;
 }
@@ -228,6 +235,29 @@ export interface ChangeOrderItemVariantPayload {
   color?: string;
   selections?: { componentId: string; size: string; color?: string }[];
   reason: string;
+}
+
+/** Una corrección del correo de una orden de invitado — `previousEmail` ya no sirve para rastrear la orden. */
+export interface OrderEmailChange {
+  id: string;
+  previousEmail: string;
+  newEmail: string;
+  reason: string;
+  changedByUserId?: string;
+  createdAt: string;
+}
+
+/**
+ * Body de `PATCH /orders/:id/email` (`SUPER_ADMIN` únicamente, y solo para
+ * una orden de invitado — `userId` vacío; la de una cuenta registrada la
+ * rechaza con 409). La API recorta y pasa a minúsculas `email`. Con
+ * `resendLastEmail` (default `true` del lado de la API) re-envía al correo
+ * NUEVO el mensaje del estatus actual; el correo anterior nunca se avisa.
+ */
+export interface ChangeOrderEmailPayload {
+  email: string;
+  reason: string;
+  resendLastEmail?: boolean;
 }
 
 /** Estatus en los que la API todavía deja corregir la talla/color de una línea sobre pedido. */

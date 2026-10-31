@@ -3,6 +3,7 @@ import type { PaginatedResult } from "@/types/catalog";
 import type {
   ApiAdminOrderShipment,
   ApiOrder,
+  ChangeOrderEmailPayload,
   ChangeOrderItemVariantPayload,
   ApiOrderShipment,
   OrderStatus,
@@ -77,6 +78,17 @@ export interface OrderService {
     itemId: string,
     payload: ChangeOrderItemVariantPayload
   ): Promise<ApiOrder>;
+  /**
+   * Corrige el correo de una orden de invitado (sin cuenta) cuando el
+   * comprador lo escribió mal en checkout y nunca le llegan sus correos. Solo
+   * `SUPER_ADMIN` (403 a cualquier otro rol); una orden de una cuenta
+   * registrada responde 409 — su correo es un snapshot de la compra. No toca
+   * dinero, inventario ni estatus; deja una fila en `ApiOrder.emailChanges`.
+   * Con `resendLastEmail` (default `true`) la API re-envía al correo NUEVO el
+   * mensaje del estatus actual; el correo anterior no recibe nada. Desde
+   * entonces el comprador rastrea la orden con el correo nuevo (+ folio).
+   */
+  changeOrderEmail(id: string, payload: ChangeOrderEmailPayload): Promise<ApiOrder>;
 }
 
 export class RestOrderService implements OrderService {
@@ -186,6 +198,13 @@ export class RestOrderService implements OrderService {
     payload: ChangeOrderItemVariantPayload
   ): Promise<ApiOrder> {
     return apiFetch<ApiOrder>(`/v1/orders/${orderId}/items/${itemId}/variant`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async changeOrderEmail(id: string, payload: ChangeOrderEmailPayload): Promise<ApiOrder> {
+    return apiFetch<ApiOrder>(`/v1/orders/${id}/email`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
