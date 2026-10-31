@@ -10,6 +10,7 @@ import {
   HelpCircle,
   History,
   Loader2,
+  Mail,
   MapPin,
   Package,
   Pencil,
@@ -23,10 +24,12 @@ import {
 import { orderService } from "@/services/order-service";
 import { enviatodoService } from "@/services/enviatodo-service";
 import { ApiError } from "@/lib/api-client";
+import { useAuth } from "@/context/auth-context";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RefundDialog, type RefundPayload } from "@/components/orders/RefundDialog";
 import { ChangeVariantDialog } from "@/components/orders/ChangeVariantDialog";
+import { ChangeOrderEmailDialog } from "@/components/orders/ChangeOrderEmailDialog";
 import { formatCurrency } from "@/lib/format-currency";
 import {
   CANCELLABLE_STATUSES,
@@ -48,6 +51,7 @@ import { Input } from "@/components/ui/input";
 import { SectionIcon } from "@/components/ui/section-icon";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -138,6 +142,7 @@ function StatusGuideCard() {
 export default function OrderDetailPage() {
   const router = useRouter();
   const { prompt, confirm } = useConfirmDialog();
+  const { user } = useAuth();
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +154,7 @@ export default function OrderDetailPage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [approveReturnDialogOpen, setApproveReturnDialogOpen] = useState(false);
   const [variantItem, setVariantItem] = useState<OrderItem | null>(null);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
 
   const [packages, setPackages] = useState<ApiEnviatodoPackage[] | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -438,6 +444,11 @@ export default function OrderDetailPage() {
   // Una orden ya enviada/entregada no se "cancela" — la API solo deja
   // reembolsarla (total o parcial), así que el botón y el diálogo lo dicen.
   const refundOnly = order.status === "SHIPPED" || order.status === "DELIVERED";
+  // Orden de invitado = sin cuenta. Corregir su correo es solo para
+  // SUPER_ADMIN (la API responde 403/409 si no — esto solo evita ofrecer el
+  // botón); el correo de una cuenta registrada es un snapshot de la compra.
+  const isGuest = !order.userId;
+  const canEditEmail = isGuest && (user?.roles.includes("SUPER_ADMIN") ?? false);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -598,9 +609,29 @@ export default function OrderDetailPage() {
             <SectionIcon icon={MapPin} index={1} />
             <div>
               <CardTitle>Cliente y envío</CardTitle>
-              <CardDescription>{order.email}</CardDescription>
+              <CardDescription className="flex flex-wrap items-center gap-2">
+                <span className="break-all">{order.email}</span>
+                {isGuest && (
+                  <Badge variant="secondary" title="Compró sin crear una cuenta.">
+                    Invitado
+                  </Badge>
+                )}
+              </CardDescription>
             </div>
           </div>
+          {canEditEmail && (
+            <CardAction>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setEmailDialogOpen(true)}
+              >
+                <Mail className="size-4" />
+                Corregir correo
+              </Button>
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
           <p className="font-medium">{order.shippingAddress.fullName}</p>
@@ -1061,6 +1092,36 @@ export default function OrderDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {order.emailChanges && order.emailChanges.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <SectionIcon icon={Mail} index={0} />
+              <div>
+                <CardTitle>Historial de correo</CardTitle>
+                <CardDescription>
+                  Correcciones del correo del comprador — el correo anterior ya no sirve para
+                  rastrear la orden.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {order.emailChanges.map((change) => (
+              <div key={change.id} className="rounded-lg border border-border px-3 py-2 text-sm">
+                <p className="font-medium break-all">
+                  {change.previousEmail} → {change.newEmail}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{change.reason}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {new Date(change.createdAt).toLocaleString("es-MX")}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
       </div>
 
       <aside className="lg:sticky lg:top-6">
@@ -1076,6 +1137,14 @@ export default function OrderDetailPage() {
           }}
           order={order}
           item={variantItem}
+          onChanged={(updated) => setOrder(updated)}
+        />
+      )}
+      {canEditEmail && (
+        <ChangeOrderEmailDialog
+          open={emailDialogOpen}
+          onOpenChange={setEmailDialogOpen}
+          order={order}
           onChanged={(updated) => setOrder(updated)}
         />
       )}
