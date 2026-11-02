@@ -15,7 +15,10 @@ import type {
  * (`setStatus`, la API 400s si falta cualquiera de las dos). El texto
  * (`update`, no aplica a un `BANNER`) y las imágenes (`uploadImage`/
  * `deleteImage`, un variant a la vez) son endpoints separados, igual que
- * las imágenes/video de producto.
+ * las imágenes/video de producto. El video (`uploadHeroVideo`/
+ * `deleteHeroVideo`, también un variant a la vez) es opcional y va encima de
+ * la imagen del mismo variant, que sigue siendo obligatoria — a diferencia de
+ * una imagen, se puede subir y quitar con la portada activa.
  */
 export interface HeroService {
   getHeroes(section?: HeroSection): Promise<ApiHero[]>;
@@ -24,6 +27,8 @@ export interface HeroService {
   setHeroStatus(id: string, active: boolean): Promise<ApiHero>;
   uploadHeroImage(id: string, file: File, variant: HeroImageVariant): Promise<ApiHero>;
   deleteHeroImage(id: string, variant: HeroImageVariant): Promise<ApiHero>;
+  uploadHeroVideo(id: string, file: File, variant: HeroImageVariant): Promise<ApiHero>;
+  deleteHeroVideo(id: string, variant: HeroImageVariant): Promise<ApiHero>;
   deleteHero(id: string): Promise<boolean>;
 }
 
@@ -65,6 +70,21 @@ export class RestHeroService implements HeroService {
 
   async deleteHeroImage(id: string, variant: HeroImageVariant): Promise<ApiHero> {
     return apiFetch<ApiHero>(`/v1/heroes/${id}/image?variant=${variant}`, {
+      method: "DELETE",
+    });
+  }
+
+  async uploadHeroVideo(id: string, file: File, variant: HeroImageVariant): Promise<ApiHero> {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiFetch<ApiHero>(`/v1/heroes/${id}/video?variant=${variant}`, {
+      method: "POST",
+      body: formData,
+    });
+  }
+
+  async deleteHeroVideo(id: string, variant: HeroImageVariant): Promise<ApiHero> {
+    return apiFetch<ApiHero>(`/v1/heroes/${id}/video?variant=${variant}`, {
       method: "DELETE",
     });
   }

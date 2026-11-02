@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { HeroImageCropper } from "@/components/hero/HeroImageCropper";
+import { HeroVideoManager } from "@/components/hero/HeroVideoManager";
 
 // Mismo patrón que el backend (`hero.dto.ts`) — ruta interna de la tienda,
 // nunca una URL completa, para que el botón no sea un open redirect.
@@ -253,6 +254,18 @@ export function HeroEditor({ hero, categories, onChange, onDeleted }: HeroEditor
             Sube una imagen para poder activar esta portada.
           </div>
         )}
+        {/* Con video de escritorio, la tienda lo reproduce encima de la imagen — la previsualización también. */}
+        {hero.videoUrl && (
+          <video
+            src={hero.videoUrl}
+            poster={hero.imageUrl ?? undefined}
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="absolute inset-0 h-full w-full object-cover opacity-90"
+          />
+        )}
 
         <div className="absolute inset-0 bg-gradient-to-t from-[#2a1f1c]/70 via-[#2a1f1c]/10 to-transparent" />
         <div className="absolute inset-x-0 top-0 h-1/4 bg-gradient-to-b from-[#2a1f1c]/70 via-[#2a1f1c]/25 to-transparent" />
@@ -365,6 +378,8 @@ export function HeroEditor({ hero, categories, onChange, onDeleted }: HeroEditor
           </Button>
         </div>
       </div>
+
+      <HeroVideoManager hero={hero} onChange={onChange} />
 
       <input
         ref={desktopInputRef}
