@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { HeroImageCropper } from "@/components/hero/HeroImageCropper";
+import { HeroVideoManager } from "@/components/hero/HeroVideoManager";
 
 interface BannerEditorProps {
   hero: ApiHero;
@@ -105,6 +106,18 @@ export function BannerEditor({ hero, onChange, onDeleted }: BannerEditorProps) {
             Sube una imagen para poder activar este banner.
           </div>
         )}
+        {/* Con video de escritorio, la tienda lo reproduce encima de la imagen — la previsualización también. */}
+        {hero.videoUrl && (
+          <video
+            src={hero.videoUrl}
+            poster={hero.imageUrl ?? undefined}
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
         <button
           type="button"
           onClick={() => desktopInputRef.current?.click()}
@@ -157,6 +170,8 @@ export function BannerEditor({ hero, onChange, onDeleted }: BannerEditorProps) {
           </Button>
         </div>
       </div>
+
+      <HeroVideoManager hero={hero} onChange={onChange} />
 
       <input
         ref={desktopInputRef}

@@ -35,12 +35,20 @@ export interface ApiHero {
   imageMobileUrl: string | null;
   imageMobileWidth: number | null;
   imageMobileHeight: number | null;
+  /**
+   * Video opcional en bucle para escritorio, encima de `imageUrl` — que sigue
+   * siendo obligatoria para activar: es el poster mientras carga el video y el
+   * respaldo para quien no puede (o no debe) reproducirlo. `null` = solo imagen.
+   */
+  videoUrl: string | null;
+  /** Igual que `videoUrl` pero para mobile (`imageMobileUrl` es su poster). Independiente del de escritorio. */
+  videoMobileUrl: string | null;
   active: boolean;
   sortOrder: number;
   updatedAt: string;
 }
 
-/** Cuál de las dos imágenes de la portada afecta `POST`/`DELETE /heroes/:id/image?variant=...`. */
+/** Cuál de las dos imágenes (o videos) de la portada afecta `POST`/`DELETE /heroes/:id/image|video?variant=...`. */
 export type HeroImageVariant = "desktop" | "mobile";
 
 /**
