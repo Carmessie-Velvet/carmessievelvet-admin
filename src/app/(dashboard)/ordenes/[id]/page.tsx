@@ -30,6 +30,7 @@ import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RefundDialog, type RefundPayload } from "@/components/orders/RefundDialog";
 import { ChangeVariantDialog } from "@/components/orders/ChangeVariantDialog";
 import { ChangeOrderEmailDialog } from "@/components/orders/ChangeOrderEmailDialog";
+import { ChangeOrderTrackingDialog } from "@/components/orders/ChangeOrderTrackingDialog";
 import { formatCurrency } from "@/lib/format-currency";
 import {
   CANCELLABLE_STATUSES,
@@ -39,6 +40,8 @@ import {
   REFUND_MODE_LABEL,
   RETURN_REQUEST_STATUS_LABEL,
   statusBadgeVariant,
+  TRACKING_CHANGE_ELIGIBLE_STATUSES,
+  TRACKING_CHANGE_ROLES,
   VARIANT_CHANGE_ELIGIBLE_STATUSES,
   type ApiAdminOrderShipment,
   type ApiOrder,
@@ -155,6 +158,7 @@ export default function OrderDetailPage() {
   const [approveReturnDialogOpen, setApproveReturnDialogOpen] = useState(false);
   const [variantItem, setVariantItem] = useState<OrderItem | null>(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [trackingDialogOpen, setTrackingDialogOpen] = useState(false);
 
   const [packages, setPackages] = useState<ApiEnviatodoPackage[] | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -449,6 +453,14 @@ export default function OrderDetailPage() {
   // botón); el correo de una cuenta registrada es un snapshot de la compra.
   const isGuest = !order.userId;
   const canEditEmail = isGuest && (user?.roles.includes("SUPER_ADMIN") ?? false);
+  // La guía solo se corrige en un envío manual ya enviado: una orden con guía
+  // activa de Enviatodo (`order.shipment`) tiene el número de la paquetería, no
+  // uno capturado a mano, y la API la rechaza con 409. Tampoco antes de
+  // «Enviada» — ahí el número todavía se captura con el botón de avanzar.
+  const canEditTracking =
+    TRACKING_CHANGE_ELIGIBLE_STATUSES.includes(order.status) &&
+    !order.shipment &&
+    (user?.roles.some((role) => TRACKING_CHANGE_ROLES.includes(role)) ?? false);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -583,11 +595,29 @@ export default function OrderDetailPage() {
               Esta orden ya está en un estado final.
             </p>
           )}
-          {order.trackingNumber && (
-            <p className="w-full text-sm text-muted-foreground">
-              Rastreo: <span className="font-medium text-foreground">{order.trackingNumber}</span>
-              {order.carrier ? ` (${order.carrier})` : ""}
-            </p>
+          {(order.trackingNumber || canEditTracking) && (
+            <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
+              {order.trackingNumber ? (
+                <p>
+                  Rastreo:{" "}
+                  <span className="font-medium text-foreground">{order.trackingNumber}</span>
+                  {order.carrier ? ` (${order.carrier})` : ""}
+                </p>
+              ) : (
+                <p>Este pedido se envió sin número de rastreo.</p>
+              )}
+              {canEditTracking && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTrackingDialogOpen(true)}
+                >
+                  <Pencil />
+                  {order.trackingNumber ? "Corregir guía" : "Agregar guía"}
+                </Button>
+              )}
+            </div>
           )}
           {order.cancellationReason && (
             <p className="w-full text-sm text-muted-foreground">
@@ -1122,6 +1152,40 @@ export default function OrderDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {order.trackingChanges && order.trackingChanges.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <SectionIcon icon={Truck} index={2} />
+              <div>
+                <CardTitle>Historial de guía</CardTitle>
+                <CardDescription>
+                  Correcciones del número de guía — el cliente ve siempre la más reciente.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {order.trackingChanges.map((change) => (
+              <div key={change.id} className="rounded-lg border border-border px-3 py-2 text-sm">
+                <p className="font-medium break-all">
+                  {change.previousTrackingNumber ?? "Sin guía"} → {change.newTrackingNumber}
+                </p>
+                {change.previousCarrier !== change.newCarrier && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Paquetería: {change.previousCarrier ?? "—"} → {change.newCarrier ?? "—"}
+                  </p>
+                )}
+                <p className="mt-0.5 text-xs text-muted-foreground">{change.reason}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {new Date(change.createdAt).toLocaleString("es-MX")}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
       </div>
 
       <aside className="lg:sticky lg:top-6">
@@ -1144,6 +1208,14 @@ export default function OrderDetailPage() {
         <ChangeOrderEmailDialog
           open={emailDialogOpen}
           onOpenChange={setEmailDialogOpen}
+          order={order}
+          onChanged={(updated) => setOrder(updated)}
+        />
+      )}
+      {canEditTracking && (
+        <ChangeOrderTrackingDialog
+          open={trackingDialogOpen}
+          onOpenChange={setTrackingDialogOpen}
           order={order}
           onChanged={(updated) => setOrder(updated)}
         />

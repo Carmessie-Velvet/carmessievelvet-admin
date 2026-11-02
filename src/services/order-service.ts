@@ -4,6 +4,7 @@ import type {
   ApiAdminOrderShipment,
   ApiOrder,
   ChangeOrderEmailPayload,
+  ChangeOrderTrackingPayload,
   ChangeOrderItemVariantPayload,
   ApiOrderShipment,
   OrderStatus,
@@ -89,6 +90,17 @@ export interface OrderService {
    * entonces el comprador rastrea la orden con el correo nuevo (+ folio).
    */
   changeOrderEmail(id: string, payload: ChangeOrderEmailPayload): Promise<ApiOrder>;
+  /**
+   * Corrige el número de guía (y opcionalmente la paquetería) de un envío
+   * manual — el número se captura una sola vez, al marcar la orden como
+   * `SHIPPED`, y esa llamada no se puede repetir. `ADMIN`/`SUPER_ADMIN`/
+   * `SALES` (403 a `MARKETING`); solo `SHIPPED`/`DELIVERED` (409 si no) y 409
+   * también si la orden tiene una guía activa de Enviatodo, cuyo número es el
+   * registro de la paquetería. No toca dinero, inventario ni estatus; deja
+   * una fila en `ApiOrder.trackingChanges`. Con `resendLastEmail` la API
+   * re-envía el correo de «enviado» (solo mientras sigue `SHIPPED`).
+   */
+  changeOrderTracking(id: string, payload: ChangeOrderTrackingPayload): Promise<ApiOrder>;
 }
 
 export class RestOrderService implements OrderService {
@@ -205,6 +217,13 @@ export class RestOrderService implements OrderService {
 
   async changeOrderEmail(id: string, payload: ChangeOrderEmailPayload): Promise<ApiOrder> {
     return apiFetch<ApiOrder>(`/v1/orders/${id}/email`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async changeOrderTracking(id: string, payload: ChangeOrderTrackingPayload): Promise<ApiOrder> {
+    return apiFetch<ApiOrder>(`/v1/orders/${id}/tracking`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
