@@ -205,6 +205,14 @@ export interface ApiOrder {
    * en el listado paginado `GET /orders`, y el comprador nunca la ve.
    */
   emailChanges?: OrderEmailChange[];
+  /**
+   * Bitácora de correcciones del número de guía de un envío manual
+   * (`PATCH /orders/:id/tracking`), de la más vieja a la más nueva. Mismas
+   * reglas de presencia que `emailChanges`: viene en `GET /orders/:id` y en
+   * la respuesta de ese `PATCH`, `undefined` en el listado paginado, y el
+   * comprador nunca la ve.
+   */
+  trackingChanges?: OrderTrackingChange[];
   createdAt: string;
   updatedAt: string;
 }
@@ -259,6 +267,44 @@ export interface ChangeOrderEmailPayload {
   reason: string;
   resendLastEmail?: boolean;
 }
+
+/** Una corrección del número de guía — `previousTrackingNumber` es `null` si la orden se envió sin número y este cambio lo agregó. */
+export interface OrderTrackingChange {
+  id: string;
+  previousTrackingNumber?: string | null;
+  newTrackingNumber: string;
+  previousCarrier?: string | null;
+  newCarrier?: string | null;
+  reason: string;
+  changedByUserId?: string;
+  createdAt: string;
+}
+
+/**
+ * Body de `PATCH /orders/:id/tracking` (`ADMIN`/`SUPER_ADMIN`/`SALES`, solo
+ * una orden `SHIPPED`/`DELIVERED` cuya guía se capturó a mano — una con guía
+ * activa de Enviatodo la rechaza con 409). La API recorta los textos.
+ * `carrier` es opcional: omitirlo deja la paquetería como está. Con
+ * `resendLastEmail` (default `true` del lado de la API) re-envía el correo de
+ * «enviado» con la guía corregida, pero solo mientras la orden sigue
+ * `SHIPPED`.
+ */
+export interface ChangeOrderTrackingPayload {
+  trackingNumber: string;
+  carrier?: string;
+  reason: string;
+  resendLastEmail?: boolean;
+}
+
+/** Estatus en los que la API deja corregir la guía de un envío manual. */
+export const TRACKING_CHANGE_ELIGIBLE_STATUSES: OrderStatus[] = ["SHIPPED", "DELIVERED"];
+
+/**
+ * Roles que pueden corregir la guía (`PATCH /orders/:id/tracking`) — quienes
+ * trabajan órdenes. `MARKETING` queda fuera, igual que en la API. Solo para
+ * no ofrecer el botón de más: la autoridad real es el 403 de la API.
+ */
+export const TRACKING_CHANGE_ROLES: readonly string[] = ["ADMIN", "SUPER_ADMIN", "SALES"];
 
 /** Estatus en los que la API todavía deja corregir la talla/color de una línea sobre pedido. */
 export const VARIANT_CHANGE_ELIGIBLE_STATUSES: OrderStatus[] = ["PAID", "PROCESSING"];
