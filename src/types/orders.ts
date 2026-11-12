@@ -213,6 +213,14 @@ export interface ApiOrder {
    * comprador nunca la ve.
    */
   trackingChanges?: OrderTrackingChange[];
+  /**
+   * Bitácora de reenvíos manuales del correo de estatus
+   * (`POST /orders/:id/resend-email`), del más viejo al más nuevo. Mismas
+   * reglas de presencia que `emailChanges`: viene en `GET /orders/:id` y en
+   * la respuesta de ese `POST`, `undefined` en el listado paginado, y el
+   * comprador nunca la ve.
+   */
+  emailResends?: OrderEmailResend[];
   createdAt: string;
   updatedAt: string;
 }
@@ -268,6 +276,15 @@ export interface ChangeOrderEmailPayload {
   resendLastEmail?: boolean;
 }
 
+/** Un reenvío manual del correo de estatus (`POST /orders/:id/resend-email`). `templateKey` es el correo que se mandó (`PAID`, `SHIPPED`...), `sentTo` la dirección a la que fue en ese momento. */
+export interface OrderEmailResend {
+  id: string;
+  templateKey: string;
+  sentTo: string;
+  sentByUserId?: string | null;
+  createdAt: string;
+}
+
 /** Una corrección del número de guía — `previousTrackingNumber` es `null` si la orden se envió sin número y este cambio lo agregó. */
 export interface OrderTrackingChange {
   id: string;
@@ -305,6 +322,30 @@ export const TRACKING_CHANGE_ELIGIBLE_STATUSES: OrderStatus[] = ["SHIPPED", "DEL
  * no ofrecer el botón de más: la autoridad real es el 403 de la API.
  */
 export const TRACKING_CHANGE_ROLES: readonly string[] = ["ADMIN", "SUPER_ADMIN", "SALES"];
+
+/**
+ * Cómo se llama, para el equipo, el correo que se manda en cada estatus
+ * (`POST /orders/:id/resend-email` reenvía el del estatus actual). Es también
+ * la lista de estatus que tienen correo que reenviar: `PENDING` no aparece —
+ * la API lo rechaza con 409, así que ni se ofrece el botón. Las claves son las
+ * mismas que `templateKey` en `OrderEmailResend`.
+ */
+export const RESEND_EMAIL_LABEL: Partial<Record<OrderStatus, string>> = {
+  PAID: "Pago confirmado",
+  PROCESSING: "En empaquetado",
+  SHIPPED: "Enviado",
+  DELIVERED: "Entregado",
+  CANCELLED: "Cancelado",
+  REFUNDED: "Reembolsado",
+  PARTIALLY_REFUNDED: "Reembolsado parcialmente",
+};
+
+/**
+ * Roles que pueden reenviar el correo de un pedido — los mismos que corrigen
+ * la guía: quienes trabajan órdenes. `MARKETING` queda fuera, igual que en la
+ * API. Solo para no ofrecer el botón de más: la autoridad real es el 403.
+ */
+export const RESEND_EMAIL_ROLES: readonly string[] = ["ADMIN", "SUPER_ADMIN", "SALES"];
 
 /** Estatus en los que la API todavía deja corregir la talla/color de una línea sobre pedido. */
 export const VARIANT_CHANGE_ELIGIBLE_STATUSES: OrderStatus[] = ["PAID", "PROCESSING"];

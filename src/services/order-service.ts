@@ -101,6 +101,16 @@ export interface OrderService {
    * re-envía el correo de «enviado» (solo mientras sigue `SHIPPED`).
    */
   changeOrderTracking(id: string, payload: ChangeOrderTrackingPayload): Promise<ApiOrder>;
+  /**
+   * `POST /v1/orders/:id/resend-email` (ADMIN/SUPER_ADMIN/SALES, sin body) —
+   * reenvía al correo actual del pedido el correo de su estatus actual, para
+   * cuando el comprador dice que no le llegó. A diferencia de los correos
+   * automáticos la API espera al proveedor: un 2xx significa que se entregó
+   * al proveedor de correo. 409 si el pedido sigue pendiente, si la plantilla
+   * está desactivada o si ya se reenvió hace menos de un minuto; 502 si el
+   * proveedor lo rechazó. Devuelve la orden con `emailResends` actualizado.
+   */
+  resendOrderEmail(id: string): Promise<ApiOrder>;
 }
 
 export class RestOrderService implements OrderService {
@@ -227,6 +237,10 @@ export class RestOrderService implements OrderService {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
+  }
+
+  async resendOrderEmail(id: string): Promise<ApiOrder> {
+    return apiFetch<ApiOrder>(`/v1/orders/${id}/resend-email`, { method: "POST" });
   }
 }
 
