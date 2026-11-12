@@ -17,6 +17,7 @@ import {
   Printer,
   Receipt,
   RefreshCw,
+  Send,
   StickyNote,
   Truck,
   Undo2,
@@ -38,6 +39,8 @@ import {
   NEXT_MANUAL_STATUS,
   ORDER_STATUS_LABEL,
   REFUND_MODE_LABEL,
+  RESEND_EMAIL_LABEL,
+  RESEND_EMAIL_ROLES,
   RETURN_REQUEST_STATUS_LABEL,
   statusBadgeVariant,
   TRACKING_CHANGE_ELIGIBLE_STATUSES,
@@ -78,6 +81,28 @@ import {
 import { cn } from "@/lib/utils";
 
 const SHIPMENT_ELIGIBLE_STATUSES: ApiOrder["status"][] = ["PAID", "PROCESSING"];
+
+// La API contesta estos errores en inglés; en el panel se muestran en español
+// y, en el caso del enfriamiento, con los segundos que faltan.
+function resendEmailErrorMessage(err: unknown): string {
+  if (!(err instanceof ApiError)) return "No se pudo reenviar el correo.";
+  if (err.status === 409) {
+    const wait = err.message.match(/wait (\d+) seconds/)?.[1];
+    if (wait) {
+      return `Ya se reenvió un correo de este pedido hace un momento. Espera ${wait} segundos para volver a enviarlo.`;
+    }
+    if (/no active email template/i.test(err.message)) {
+      return "No hay una plantilla de correo activa para este estatus, así que no hay nada que reenviar.";
+    }
+    if (/awaiting payment/i.test(err.message)) {
+      return "El pedido sigue pendiente de pago: todavía no hay un correo que reenviar.";
+    }
+  }
+  if (err.status === 502) {
+    return "El proveedor de correo no pudo enviarlo. Intenta de nuevo en un momento.";
+  }
+  return err.message;
+}
 
 function packageLabel(pkg: ApiEnviatodoPackage): string {
   const dims =
@@ -159,6 +184,7 @@ export default function OrderDetailPage() {
   const [variantItem, setVariantItem] = useState<OrderItem | null>(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [trackingDialogOpen, setTrackingDialogOpen] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const [packages, setPackages] = useState<ApiEnviatodoPackage[] | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -461,6 +487,37 @@ export default function OrderDetailPage() {
     TRACKING_CHANGE_ELIGIBLE_STATUSES.includes(order.status) &&
     !order.shipment &&
     (user?.roles.some((role) => TRACKING_CHANGE_ROLES.includes(role)) ?? false);
+  // Reenviar el correo del estatus actual: solo hay uno que reenviar una vez
+  // que la orden salió de «Pendiente» (RESEND_EMAIL_LABEL no tiene PENDING), y
+  // solo para quienes trabajan órdenes. La API repite ambas reglas (409/403).
+  const resendEmailLabel = RESEND_EMAIL_LABEL[order.status];
+  const canResendEmail =
+    Boolean(resendEmailLabel) &&
+    (user?.roles.some((role) => RESEND_EMAIL_ROLES.includes(role)) ?? false);
+
+  async function handleResendEmail() {
+    if (!order || !resendEmailLabel) return;
+    const confirmed = await confirm({
+      title: "¿Reenviar el correo del pedido?",
+      description:
+        `Se enviará a ${order.email} el correo del estatus actual («${resendEmailLabel}»). ` +
+        `Úsalo cuando el cliente diga que no le llegó. Queda registrado en este pedido.`,
+      confirmLabel: "Reenviar correo",
+      cancelLabel: "Volver",
+    });
+    if (!confirmed) return;
+
+    setResending(true);
+    try {
+      const updated = await orderService.resendOrderEmail(order.id);
+      setOrder(updated);
+      toast.success(`Correo «${resendEmailLabel}» reenviado a ${order.email}.`);
+    } catch (err) {
+      toast.error(resendEmailErrorMessage(err));
+    } finally {
+      setResending(false);
+    }
+  }
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -649,17 +706,31 @@ export default function OrderDetailPage() {
               </CardDescription>
             </div>
           </div>
-          {canEditEmail && (
-            <CardAction>
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-1.5"
-                onClick={() => setEmailDialogOpen(true)}
-              >
-                <Mail className="size-4" />
-                Corregir correo
-              </Button>
+          {(canEditEmail || canResendEmail) && (
+            <CardAction className="flex flex-wrap justify-end gap-2">
+              {canResendEmail && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={resending}
+                  onClick={handleResendEmail}
+                >
+                  {resending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                  Reenviar correo
+                </Button>
+              )}
+              {canEditEmail && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => setEmailDialogOpen(true)}
+                >
+                  <Mail className="size-4" />
+                  Corregir correo
+                </Button>
+              )}
             </CardAction>
           )}
         </CardHeader>
@@ -1180,6 +1251,37 @@ export default function OrderDetailPage() {
                 <p className="mt-0.5 text-xs text-muted-foreground">{change.reason}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {new Date(change.createdAt).toLocaleString("es-MX")}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {order.emailResends && order.emailResends.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <SectionIcon icon={Send} index={3} />
+              <div>
+                <CardTitle>Reenvíos de correo</CardTitle>
+                <CardDescription>
+                  Cada vez que se reenvió al cliente el correo del estatus del pedido.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {order.emailResends.map((resend) => (
+              <div key={resend.id} className="rounded-lg border border-border px-3 py-2 text-sm">
+                <p className="font-medium">
+                  Correo «{RESEND_EMAIL_LABEL[resend.templateKey as keyof typeof RESEND_EMAIL_LABEL] ?? resend.templateKey}»
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground break-all">
+                  Enviado a {resend.sentTo}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {new Date(resend.createdAt).toLocaleString("es-MX")}
                 </p>
               </div>
             ))}
