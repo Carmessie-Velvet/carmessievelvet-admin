@@ -18,6 +18,21 @@ export interface UserService {
   assignRoles(userId: string, roles: UserRole[]): Promise<UserRole[]>;
   /** `PATCH /users/:id/email` — SUPER_ADMIN únicamente (la API 403s a un ADMIN normal). Invalida todas las sesiones del usuario afectado. */
   changeUserEmail(id: string, email: string): Promise<ApiUser>;
+  /**
+   * `PATCH /users/:id/role` (ADMIN o SUPER_ADMIN) — cambia el rol de back-office
+   * (`ADMIN`/`MARKETING`/`SALES`) de una cuenta de staff y conserva sus demás
+   * roles; con `USER` le quita todos los de staff y la deja como cliente normal. A diferencia de `assignRoles`, no reemplaza el arreglo completo ni
+   * pide SUPER_ADMIN. 409 si no tiene rol de staff, si es la propia cuenta o
+   * un SUPER_ADMIN; 400 si ya tiene ese rol.
+   */
+  changeStaffRole(id: string, role: UserRole): Promise<ApiUser>;
+  /**
+   * `DELETE /users/:id` (ADMIN o SUPER_ADMIN) — borrado lógico de una cuenta
+   * de staff creada por error: sale del listado, ya no puede entrar y su
+   * correo queda libre. Solo cuentas solo-de-staff (sin rol `USER`); 409 para
+   * un cliente, un SUPER_ADMIN o la propia cuenta.
+   */
+  deleteStaffAccount(id: string): Promise<boolean>;
 }
 
 export class RestUserService implements UserService {
@@ -61,6 +76,17 @@ export class RestUserService implements UserService {
       method: "PATCH",
       body: JSON.stringify({ email }),
     });
+  }
+
+  async changeStaffRole(id: string, role: UserRole): Promise<ApiUser> {
+    return apiFetch<ApiUser>(`/v1/users/${id}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  async deleteStaffAccount(id: string): Promise<boolean> {
+    return apiFetch<boolean>(`/v1/users/${id}`, { method: "DELETE" });
   }
 }
 
