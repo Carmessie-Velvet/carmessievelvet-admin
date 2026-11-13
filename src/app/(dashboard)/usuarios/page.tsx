@@ -10,6 +10,8 @@ import {
   Mail,
   Search,
   ShieldCheck,
+  Trash2,
+  UserCog,
   UserPlus,
   X,
 } from "lucide-react";
@@ -67,6 +69,38 @@ function roleBadgeVariant(role: UserRole): "default" | "secondary" | "outline" {
   return "secondary"; // ADMIN, MARKETING, SALES — los tres son "staff" de este panel.
 }
 
+/** Tiene al menos un rol de back-office (Admin/Marketing/Ventas). */
+function isStaff(user: ApiUser): boolean {
+  return user.roles.some((r) => GRANTABLE_ROLES.includes(r));
+}
+
+/**
+ * Cuenta solo de staff: rol de back-office y **sin** `USER`. Solo esas se
+ * pueden borrar — una cuenta que además es de cliente (un cliente promovido)
+ * tiene pedidos y favoritos propios y a esa se le quita el rol, no se borra.
+ * La API lo exige igual (409); esto solo evita ofrecer el botón de más.
+ */
+function isStaffOnly(user: ApiUser): boolean {
+  return isStaff(user) && !user.roles.includes("USER") && !user.roles.includes("SUPER_ADMIN");
+}
+
+// La API contesta estos errores en inglés; en el panel se muestran en español.
+function staffAccountErrorMessage(err: unknown, fallback: string): string {
+  if (!(err instanceof ApiError)) return fallback;
+  if (/your own/i.test(err.message)) return "No puedes hacerlo sobre tu propia cuenta.";
+  if (/SUPER_ADMIN/.test(err.message)) {
+    return "Una cuenta de Super admin no se puede modificar desde aquí.";
+  }
+  if (/customer account/i.test(err.message)) {
+    return "Esta cuenta también es de cliente (tiene pedidos propios): quítale el rol de staff en vez de borrarla.";
+  }
+  if (/no staff role|Only staff/i.test(err.message)) {
+    return "Esta cuenta no tiene un rol de staff.";
+  }
+  if (/No role change/i.test(err.message)) return "Esa cuenta ya tiene ese rol.";
+  return err.message;
+}
+
 export default function UsersPage() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
@@ -92,6 +126,9 @@ export default function UsersPage() {
 
   const [emailTarget, setEmailTarget] = useState<ApiUser | null>(null);
   const [emailValue, setEmailValue] = useState("");
+  const [roleTarget, setRoleTarget] = useState<ApiUser | null>(null);
+  const [roleValue, setRoleValue] = useState<UserRole>("SALES");
+  const [savingRole, setSavingRole] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
 
   // Buscar en la API en cada tecla sería un llamado por letra — se espera
@@ -261,6 +298,55 @@ export default function UsersPage() {
       toast.success(`Se le quitó el rol ${USER_ROLE_LABEL[role]} a ${target.email}.`);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "No se pudo quitar el rol.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function openChangeRole(target: ApiUser) {
+    setRoleTarget(target);
+    setRoleValue(GRANTABLE_ROLES.find((r) => target.roles.includes(r)) ?? "SALES");
+  }
+
+  // `PATCH /users/:id/role` — a diferencia de los botones «+ Rol»/«×» de
+  // arriba (que van por `/roles/assign`, solo SUPER_ADMIN), esto lo puede usar
+  // también un Admin: cambia el rol de staff de la cuenta por otro y deja el
+  // resto de sus roles como están.
+  async function handleChangeRole() {
+    if (!roleTarget) return;
+
+    setSavingRole(true);
+    try {
+      const updated = await userService.changeStaffRole(roleTarget.id, roleValue);
+      setUsers((prev) => prev?.map((u) => (u.id === roleTarget.id ? updated : u)) ?? prev);
+      toast.success(`${roleTarget.email} ahora es ${USER_ROLE_LABEL[roleValue]}.`);
+      setRoleTarget(null);
+    } catch (err) {
+      toast.error(staffAccountErrorMessage(err, "No se pudo cambiar el rol."));
+    } finally {
+      setSavingRole(false);
+    }
+  }
+
+  async function handleDeleteAccount(target: ApiUser) {
+    const ok = await confirm({
+      title: `¿Eliminar la cuenta de ${target.firstName} ${target.lastName}?`,
+      description:
+        `${target.email} deja de poder entrar a este panel y desaparece de la lista. ` +
+        `El correo queda libre para crear otra cuenta. Esta acción no se puede deshacer.`,
+      confirmLabel: "Eliminar cuenta",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setBusyId(target.id);
+    try {
+      await userService.deleteStaffAccount(target.id);
+      setUsers((prev) => prev?.filter((u) => u.id !== target.id) ?? prev);
+      setTotal((t) => Math.max(0, t - 1));
+      toast.success(`Se eliminó la cuenta de ${target.email}.`);
+    } catch (err) {
+      toast.error(staffAccountErrorMessage(err, "No se pudo eliminar la cuenta."));
     } finally {
       setBusyId(null);
     }
@@ -463,6 +549,34 @@ export default function UsersPage() {
                               + {USER_ROLE_LABEL[role]}
                             </Button>
                           ))}
+                          {isStaff(u) && !isSuperAdminRow && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1"
+                              disabled={isSelf || busyId === u.id}
+                              title={isSelf ? "No puedes cambiar tu propio rol." : undefined}
+                              onClick={() => openChangeRole(u)}
+                            >
+                              <UserCog className="size-3.5" />
+                              Cambiar rol
+                            </Button>
+                          )}
+                          {isStaffOnly(u) && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1 text-destructive hover:text-destructive"
+                              disabled={isSelf || busyId === u.id}
+                              title={isSelf ? "No puedes eliminar tu propia cuenta." : undefined}
+                              onClick={() => handleDeleteAccount(u)}
+                            >
+                              <Trash2 className="size-3.5" />
+                              Eliminar
+                            </Button>
+                          )}
                           {isSuperAdmin && (
                             <Button
                               type="button"
@@ -624,6 +738,53 @@ export default function UsersPage() {
               </Button>
               <Button type="submit" disabled={creating}>
                 {creating ? "Creando..." : "Crear cuenta"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={roleTarget !== null} onOpenChange={(open) => !open && setRoleTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cambiar rol</DialogTitle>
+            <DialogDescription>
+              {roleTarget &&
+                `Elige el rol de ${roleTarget.firstName} ${roleTarget.lastName} (${roleTarget.email}). Reemplaza el que tiene ahora y surte efecto de inmediato.`}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleChangeRole();
+            }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="staff-role">Rol</Label>
+              <Select value={roleValue} onValueChange={(v) => setRoleValue(v as UserRole)}>
+                <SelectTrigger id="staff-role">
+                  <SelectValue>{(value: UserRole) => USER_ROLE_LABEL[value]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {GRANTABLE_ROLES.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {USER_ROLE_LABEL[role]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Ventas ve Órdenes y Devoluciones; Marketing ve Productos, Cupones y Descuentos; Admin
+                ve todo el panel.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setRoleTarget(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={savingRole}>
+                {savingRole ? "Guardando..." : "Guardar rol"}
               </Button>
             </DialogFooter>
           </form>
