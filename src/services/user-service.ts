@@ -21,7 +21,7 @@ export interface UserService {
   /**
    * `PATCH /users/:id/role` (ADMIN o SUPER_ADMIN) — cambia el rol de back-office
    * (`ADMIN`/`MARKETING`/`SALES`) de una cuenta de staff y conserva sus demás
-   * roles. A diferencia de `assignRoles`, no reemplaza el arreglo completo ni
+   * roles; con `USER` le quita todos los de staff y la deja como cliente normal. A diferencia de `assignRoles`, no reemplaza el arreglo completo ni
    * pide SUPER_ADMIN. 409 si no tiene rol de staff, si es la propia cuenta o
    * un SUPER_ADMIN; 400 si ya tiene ese rol.
    */

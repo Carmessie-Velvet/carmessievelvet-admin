@@ -55,6 +55,11 @@ const PAGE_SIZE = 20;
 
 const ROLE_FILTER_OPTIONS: UserRole[] = ["USER", "ADMIN", "MARKETING", "SALES", "SUPER_ADMIN"];
 
+// Lo que ofrece «Cambiar rol»: los tres roles de staff, o «Cliente», que le
+// quita todos los de staff y deja la cuenta como una cuenta normal de la tienda
+// (`PATCH /users/:id/role` con `role: "USER"`).
+const ROLE_CHANGE_OPTIONS: UserRole[] = [...GRANTABLE_ROLES, "USER"];
+
 const EMPTY_ADMIN_FORM: CreateAdminPayload = {
   email: "",
   password: "",
@@ -319,7 +324,11 @@ export default function UsersPage() {
     try {
       const updated = await userService.changeStaffRole(roleTarget.id, roleValue);
       setUsers((prev) => prev?.map((u) => (u.id === roleTarget.id ? updated : u)) ?? prev);
-      toast.success(`${roleTarget.email} ahora es ${USER_ROLE_LABEL[roleValue]}.`);
+      toast.success(
+        roleValue === "USER"
+          ? `${roleTarget.email} ya no tiene acceso al panel: quedó como cliente.`
+          : `${roleTarget.email} ahora es ${USER_ROLE_LABEL[roleValue]}.`
+      );
       setRoleTarget(null);
     } catch (err) {
       toast.error(staffAccountErrorMessage(err, "No se pudo cambiar el rol."));
@@ -767,7 +776,7 @@ export default function UsersPage() {
                   <SelectValue>{(value: UserRole) => USER_ROLE_LABEL[value]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {GRANTABLE_ROLES.map((role) => (
+                  {ROLE_CHANGE_OPTIONS.map((role) => (
                     <SelectItem key={role} value={role}>
                       {USER_ROLE_LABEL[role]}
                     </SelectItem>
@@ -775,8 +784,9 @@ export default function UsersPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Ventas ve Órdenes y Devoluciones; Marketing ve Productos, Cupones y Descuentos; Admin
-                ve todo el panel.
+                {roleValue === "USER"
+                  ? "Cliente: le quita todos los roles del panel — deja de poder entrar y queda como una cuenta normal de la tienda."
+                  : "Ventas ve Órdenes y Devoluciones; Marketing ve Productos, Cupones y Descuentos; Admin ve todo el panel."}
               </p>
             </div>
             <DialogFooter>
