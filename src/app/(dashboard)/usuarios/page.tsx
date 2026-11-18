@@ -532,7 +532,14 @@ export default function UsersPage() {
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {!u.enabled && <Badge variant="destructive">Deshabilitada</Badge>}
-                          {!u.emailVerifiedAt && <Badge variant="outline">Sin verificar</Badge>}
+                          {/*
+                            Etiqueta «Sin verificar» DESACTIVADA (2026-11-18): la API ya no
+                            exige ni manda la verificación del correo (EMAIL_VERIFICATION_REQUIRED
+                            apagada), así que toda cuenta nueva tiene `emailVerifiedAt` en null y
+                            la etiqueta saldría en todas sin significar nada. Si se reactiva la
+                            verificación en la API, descomentar:
+                            {!u.emailVerifiedAt && <Badge variant="outline">Sin verificar</Badge>}
+                          */}
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
