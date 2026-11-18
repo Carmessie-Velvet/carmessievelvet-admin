@@ -308,6 +308,10 @@ Cuando un cliente dice «no me llegó el correo» no había cómo volver a mand�
 - Es el correo del **estatus**, no la última fase que haya reportado la paquetería (`SHIPMENT_STATUS_UPDATE`) en un pedido EXPRESS.
 - **Verificado en el navegador contra un API simulado** (un servidor real que implementa el enfriamiento de 60 s y los modos de falla, no un `fetch` falso, que se perdía en cada recarga del servidor de desarrollo): botón visible para `SALES` en un pedido `SHIPPED`; el diálogo muestra dirección y correo correctos; el `POST` sale y aparece la card con el correo/dirección/fecha; un segundo reenvío inmediato muestra «Espera 46 segundos» sin duplicar la bitácora; un pedido `PENDING` no ofrece el botón; un `502` muestra el mensaje en español, no deja fila en la bitácora y el botón vuelve a quedar habilitado. **No** contra el endpoint real ni con un correo real.
 
+## Etiqueta «Sin verificar» desactivada (`/usuarios`, 2026-11-18)
+
+La API apagó la verificación del correo por correo electrónico (`EMAIL_VERIFICATION_REQUIRED`, ver `carmessievelvet-api`, módulo `auth`): ya no se manda el enlace ni se bloquea el login, así que toda cuenta nueva queda con `emailVerifiedAt` en `null`. La etiqueta «Sin verificar» de la columna de estado habría salido en **todas** las cuentas nuevas sin significar nada, por lo que está **comentada** en `usuarios/page.tsx` (con el motivo y la línea para descomentar). `ApiUser.emailVerifiedAt` se sigue recibiendo y tipando. Si se reactiva la verificación en la API, descomentarla.
+
 ## Cambiar el rol y eliminar una cuenta de staff (`/usuarios`)
 
 La clienta creó el acceso de una empleada con el rol equivocado (Admin, para que preguntara por guías — debía ser Ventas) y no pudo arreglarlo: no había botón para borrarla ni para cambiarle el rol. Los botones «+ Marketing/+ Ventas» y la `×` de cada rol existen, pero son solo de `SUPER_ADMIN` (van por `POST /roles/assign`) y la `×` nunca se ofrece sobre el **último** rol de una cuenta — justo el caso de una cuenta recién creada como Admin. El backend agregó `PATCH /users/:id/role` y `DELETE /users/:id`, ambos para `ADMIN` o `SUPER_ADMIN`.
