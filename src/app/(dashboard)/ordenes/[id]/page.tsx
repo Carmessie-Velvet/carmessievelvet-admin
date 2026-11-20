@@ -26,6 +26,7 @@ import { orderService } from "@/services/order-service";
 import { enviatodoService } from "@/services/enviatodo-service";
 import { ApiError } from "@/lib/api-client";
 import { useAuth } from "@/context/auth-context";
+import { canOperateOrders } from "@/lib/nav-access";
 import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RefundDialog, type RefundPayload } from "@/components/orders/RefundDialog";
@@ -39,8 +40,9 @@ import {
   NEXT_MANUAL_STATUS,
   ORDER_STATUS_LABEL,
   REFUND_MODE_LABEL,
-  RESEND_EMAIL_LABEL,
   RESEND_EMAIL_ROLES,
+  RESEND_TEMPLATE_LABEL,
+  resendEmailLabelFor,
   RETURN_REQUEST_STATUS_LABEL,
   statusBadgeVariant,
   TRACKING_CHANGE_ELIGIBLE_STATUSES,
@@ -171,6 +173,12 @@ export default function OrderDetailPage() {
   const router = useRouter();
   const { prompt, confirm } = useConfirmDialog();
   const { user } = useAuth();
+  // Atención al cliente (`SUPPORT`) solo ve la orden, reenvía el correo, deja
+  // notas y descarga la guía: sin estatus, cancelar/reembolsar, guías nuevas,
+  // tallas ni devoluciones, y sin pedirle a la API lo que ese rol no puede ver
+  // (paquetes de Enviatodo, la vista del envío con el costo real). La API
+  // responde 403 a todo eso de todos modos; esto evita ofrecer de más.
+  const canOperate = canOperateOrders(user?.roles ?? []);
   const params = useParams<{ id: string }>();
   const [order, setOrder] = useState<ApiOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -225,6 +233,7 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     if (
+      !canOperate ||
       !order ||
       order.shipment ||
       !isAutomatedShipping(order.shippingMethod) ||
@@ -252,10 +261,10 @@ export default function OrderDetailPage() {
     };
     // Solo se necesita una vez, cuando la orden queda elegible para generar guía.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order?.id, order?.status, order?.shipment]);
+  }, [canOperate, order?.id, order?.status, order?.shipment]);
 
   useEffect(() => {
-    if (!order?.shipment) return;
+    if (!canOperate || !order?.shipment) return;
 
     let cancelled = false;
     orderService
@@ -270,7 +279,7 @@ export default function OrderDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [order?.id, order?.shipment]);
+  }, [canOperate, order?.id, order?.shipment]);
 
   async function fetchQuotes() {
     if (!order) return;
@@ -469,8 +478,8 @@ export default function OrderDetailPage() {
 
   const automated = isAutomatedShipping(order.shippingMethod);
   const next = NEXT_MANUAL_STATUS[order.status];
-  const showManualAdvance = Boolean(next) && !automated;
-  const cancellable = CANCELLABLE_STATUSES.includes(order.status);
+  const showManualAdvance = canOperate && Boolean(next) && !automated;
+  const cancellable = canOperate && CANCELLABLE_STATUSES.includes(order.status);
   // Una orden ya enviada/entregada no se "cancela" — la API solo deja
   // reembolsarla (total o parcial), así que el botón y el diálogo lo dicen.
   const refundOnly = order.status === "SHIPPED" || order.status === "DELIVERED";
@@ -488,9 +497,9 @@ export default function OrderDetailPage() {
     !order.shipment &&
     (user?.roles.some((role) => TRACKING_CHANGE_ROLES.includes(role)) ?? false);
   // Reenviar el correo del estatus actual: solo hay uno que reenviar una vez
-  // que la orden salió de «Pendiente» (RESEND_EMAIL_LABEL no tiene PENDING), y
+  // que la orden salió de «Pendiente» (`resendEmailLabelFor` no da etiqueta para PENDING), y
   // solo para quienes trabajan órdenes. La API repite ambas reglas (409/403).
-  const resendEmailLabel = RESEND_EMAIL_LABEL[order.status];
+  const resendEmailLabel = resendEmailLabelFor(order);
   const canResendEmail =
     Boolean(resendEmailLabel) &&
     (user?.roles.some((role) => RESEND_EMAIL_ROLES.includes(role)) ?? false);
@@ -570,7 +579,9 @@ export default function OrderDetailPage() {
               <CardDescription>
                 {order.status === "PENDING"
                   ? "Todavía no se confirma el pago — no hay acciones manuales disponibles."
-                  : "Avanza el estado a medida que se procesa el envío."}
+                  : canOperate
+                    ? "Avanza el estado a medida que se procesa el envío."
+                    : "Consulta en qué va el pedido. Los cambios de estatus los hace el equipo de operación."}
               </CardDescription>
             </div>
           </div>
@@ -597,7 +608,7 @@ export default function OrderDetailPage() {
               Marcar como {ORDER_STATUS_LABEL[next]}
             </Button>
           )}
-          {automated && order.status === "PAID" && (
+          {canOperate && automated && order.status === "PAID" && (
             <p className="w-full text-sm text-muted-foreground">
               Genera la guía de envío (tarjeta de abajo) para iniciar el proceso — la orden pasará a
               &quot;En proceso&quot; automáticamente.
@@ -608,7 +619,7 @@ export default function OrderDetailPage() {
               El estatus avanza automáticamente según Estafeta (se actualiza cada ~30 min).
             </p>
           )}
-          {automated && next && (
+          {canOperate && automated && next && (
             <div className="flex w-full flex-col gap-3 rounded-lg border border-dashed border-border p-3">
               <p className="text-xs text-muted-foreground">
                 Solo si algo falla con Enviatodo/Estafeta y el estado no se puede actualizar solo:
@@ -647,7 +658,7 @@ export default function OrderDetailPage() {
               {refundOnly ? "Reembolsar" : "Cancelar orden"}
             </Button>
           )}
-          {!next && !cancellable && (
+          {canOperate && !next && !cancellable && (
             <p className="text-sm text-muted-foreground">
               Esta orden ya está en un estado final.
             </p>
@@ -830,6 +841,10 @@ export default function OrderDetailPage() {
               El método de envío de esta orden ({order.shippingMethod}) se gestiona manualmente —
               no se genera guía automática.
             </p>
+          ) : !canOperate ? (
+            <p className="text-sm text-muted-foreground">
+              Todavía no hay una guía generada para esta orden. La genera el equipo de operación.
+            </p>
           ) : SHIPMENT_ELIGIBLE_STATUSES.includes(order.status) ? (
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
@@ -974,14 +989,20 @@ export default function OrderDetailPage() {
             </p>
 
             {order.returnRequest.status === "PENDING" ? (
-              <div className="flex flex-wrap gap-3">
-                <Button type="button" onClick={() => setApproveReturnDialogOpen(true)} disabled={busy}>
-                  Aprobar (reembolsar)
-                </Button>
-                <Button type="button" variant="outline" onClick={handleRejectReturn} disabled={busy}>
-                  Rechazar
-                </Button>
-              </div>
+              canOperate ? (
+                <div className="flex flex-wrap gap-3">
+                  <Button type="button" onClick={() => setApproveReturnDialogOpen(true)} disabled={busy}>
+                    Aprobar (reembolsar)
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleRejectReturn} disabled={busy}>
+                    Rechazar
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Pendiente: la revisa el equipo de operación.
+                </p>
+              )
             ) : (
               <div className="text-sm text-muted-foreground">
                 {order.returnRequest.resolutionNote && (
@@ -1066,7 +1087,7 @@ export default function OrderDetailPage() {
                           {item.color ? ` (${item.color})` : ""}
                         </>
                       )}
-                      {item.madeToOrder && VARIANT_CHANGE_ELIGIBLE_STATUSES.includes(order.status) && (
+                      {canOperate && item.madeToOrder && VARIANT_CHANGE_ELIGIBLE_STATUSES.includes(order.status) && (
                         <Button
                           type="button"
                           variant="outline"
@@ -1275,7 +1296,7 @@ export default function OrderDetailPage() {
             {order.emailResends.map((resend) => (
               <div key={resend.id} className="rounded-lg border border-border px-3 py-2 text-sm">
                 <p className="font-medium">
-                  Correo «{RESEND_EMAIL_LABEL[resend.templateKey as keyof typeof RESEND_EMAIL_LABEL] ?? resend.templateKey}»
+                  Correo «{RESEND_TEMPLATE_LABEL[resend.templateKey] ?? resend.templateKey}»
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground break-all">
                   Enviado a {resend.sentTo}
