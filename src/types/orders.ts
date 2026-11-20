@@ -341,11 +341,40 @@ export const RESEND_EMAIL_LABEL: Partial<Record<OrderStatus, string>> = {
 };
 
 /**
- * Roles que pueden reenviar el correo de un pedido — los mismos que corrigen
- * la guía: quienes trabajan órdenes. `MARKETING` queda fuera, igual que en la
- * API. Solo para no ofrecer el botón de más: la autoridad real es el 403.
+ * Cómo se llama cada correo que puede reenviarse, por su `templateKey` — los
+ * de cada estatus más `SHIPMENT_CREATED`, el de «tu guía de envío ya está
+ * lista» que la API reenvía cuando el pedido está en preparación y ya tiene
+ * guía (un pedido Express llega a ese estatus generando la guía, así que el de
+ * «en preparación» no es el que su comprador recibió y no trae la guía).
  */
-export const RESEND_EMAIL_ROLES: readonly string[] = ["ADMIN", "SUPER_ADMIN", "SALES"];
+export const RESEND_TEMPLATE_LABEL: Record<string, string> = {
+  ...RESEND_EMAIL_LABEL,
+  SHIPMENT_CREATED: "Guía generada",
+};
+
+/**
+ * El correo que reenviaría hoy `POST /orders/:id/resend-email` para esta orden
+ * (`undefined` si no hay ninguno: un pedido `PENDING`). Refleja `pickResendEmail`
+ * de la API: `PROCESSING` con guía activa → «Guía generada»; el resto, el del
+ * estatus. `order.shipment` es siempre la guía activa (no cancelada).
+ */
+export function resendEmailLabelFor(order: {
+  status: OrderStatus;
+  shipment?: unknown;
+}): string | undefined {
+  if (order.status === "PROCESSING" && order.shipment) {
+    return RESEND_TEMPLATE_LABEL.SHIPMENT_CREATED;
+  }
+  return RESEND_EMAIL_LABEL[order.status];
+}
+
+/**
+ * Roles que pueden reenviar el correo de un pedido — quienes trabajan órdenes
+ * más atención al cliente (`SUPPORT`, para quien contesta «no me llegó»).
+ * `MARKETING` queda fuera, igual que en la API. Solo para no ofrecer el botón
+ * de más: la autoridad real es el 403.
+ */
+export const RESEND_EMAIL_ROLES: readonly string[] = ["ADMIN", "SUPER_ADMIN", "SALES", "SUPPORT"];
 
 /** Estatus en los que la API todavía deja corregir la talla/color de una línea sobre pedido. */
 export const VARIANT_CHANGE_ELIGIBLE_STATUSES: OrderStatus[] = ["PAID", "PROCESSING"];

@@ -53,7 +53,7 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
 
-const ROLE_FILTER_OPTIONS: UserRole[] = ["USER", "ADMIN", "MARKETING", "SALES", "SUPER_ADMIN"];
+const ROLE_FILTER_OPTIONS: UserRole[] = ["USER", "ADMIN", "MARKETING", "SALES", "SUPPORT", "SUPER_ADMIN"];
 
 // Lo que ofrece «Cambiar rol»: los tres roles de staff, o «Cliente», que le
 // quita todos los de staff y deja la cuenta como una cuenta normal de la tienda
@@ -71,10 +71,10 @@ const EMPTY_ADMIN_FORM: CreateAdminPayload = {
 function roleBadgeVariant(role: UserRole): "default" | "secondary" | "outline" {
   if (role === "SUPER_ADMIN") return "default";
   if (role === "USER") return "outline";
-  return "secondary"; // ADMIN, MARKETING, SALES — los tres son "staff" de este panel.
+  return "secondary"; // ADMIN, MARKETING, SALES, SUPPORT — todos son "staff" de este panel.
 }
 
-/** Tiene al menos un rol de back-office (Admin/Marketing/Ventas). */
+/** Tiene al menos un rol de staff (Admin/Marketing/Ventas/Atención al cliente). */
 function isStaff(user: ApiUser): boolean {
   return user.roles.some((r) => GRANTABLE_ROLES.includes(r));
 }
@@ -793,7 +793,7 @@ export default function UsersPage() {
               <p className="text-xs text-muted-foreground">
                 {roleValue === "USER"
                   ? "Cliente: le quita todos los roles del panel — deja de poder entrar y queda como una cuenta normal de la tienda."
-                  : "Ventas ve Órdenes y Devoluciones; Marketing ve Productos, Cupones y Descuentos; Admin ve todo el panel."}
+                  : "Ventas ve Órdenes y Devoluciones; Marketing ve Productos, Cupones y Descuentos; Atención al cliente solo ve Órdenes (consultar, reenviar el correo, dejar notas y descargar la guía — no cambia estatus ni cancela); Admin ve todo el panel."}
               </p>
             </div>
             <DialogFooter>

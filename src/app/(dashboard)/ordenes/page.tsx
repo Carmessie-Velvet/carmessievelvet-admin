@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { orderService } from "@/services/order-service";
 import { ApiError } from "@/lib/api-client";
+import { useAuth } from "@/context/auth-context";
+import { canOperateOrders } from "@/lib/nav-access";
 import { formatCurrency } from "@/lib/format-currency";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +63,8 @@ const STATUS_OPTIONS: OrderStatus[] = [
 
 export default function OrdersPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const canOperate = canOperateOrders(user?.roles ?? []);
   const [orders, setOrders] = useState<ApiOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -169,7 +173,8 @@ export default function OrdersPage() {
                 : "Cargando órdenes desde la API..."}
           </p>
         </div>
-        {visibleOrders && visibleOrders.length > 0 && (
+        {/* Atención al cliente no exporta el reporte de producción: no es parte de lo suyo. */}
+        {canOperate && visibleOrders && visibleOrders.length > 0 && (
           <Button type="button" variant="outline" className="gap-1.5" onClick={() => setExportOpen(true)}>
             <Download className="size-4" />
             Exportar producción

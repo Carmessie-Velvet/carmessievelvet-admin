@@ -1,4 +1,4 @@
-import type { UserRole } from "@/types/users";
+import { BACKOFFICE_ROLES, type UserRole } from "@/types/users";
 
 /** Ven todo el panel — sin cambios respecto a como funcionaba antes de MARKETING/SALES. */
 export const FULL_ACCESS_ROLES: UserRole[] = ["ADMIN", "SUPER_ADMIN"];
@@ -17,7 +17,10 @@ interface NavRoute {
  * SALES solo ve Órdenes/Devoluciones — el resto del panel (Inicio,
  * Categorías, Tags, Métodos de envío, Envíos automatizados, Usuarios,
  * Configuración, y el Dashboard con cifras financieras) se queda
- * ADMIN/SUPER_ADMIN únicamente.
+ * ADMIN/SUPER_ADMIN únicamente. SUPPORT («Atención al cliente») solo ve
+ * Órdenes — no Devoluciones: aprobar o rechazar una es una decisión de
+ * operación, y a ellas solo les toca ver la orden, reenviar el correo, dejar
+ * notas y descargar la guía (ver `canOperateOrders`).
  *
  * ⚠️ Esto es solo la capa de UI/navegación de este admin — la API todavía
  * no separa el acceso de MARKETING/SALES por dominio a nivel de rutas
@@ -34,7 +37,7 @@ const NAV_ROUTES: NavRoute[] = [
   { href: "/testimonios", roles: FULL_ACCESS_ROLES },
   { href: "/productos", roles: [...FULL_ACCESS_ROLES, "MARKETING"] },
   { href: "/categorias", roles: FULL_ACCESS_ROLES },
-  { href: "/ordenes", roles: [...FULL_ACCESS_ROLES, "SALES"] },
+  { href: "/ordenes", roles: [...FULL_ACCESS_ROLES, "SALES", "SUPPORT"] },
   { href: "/devoluciones", roles: [...FULL_ACCESS_ROLES, "SALES"] },
   { href: "/cupones", roles: [...FULL_ACCESS_ROLES, "MARKETING"] },
   { href: "/descuentos", roles: [...FULL_ACCESS_ROLES, "MARKETING"] },
@@ -70,4 +73,15 @@ export function isNavItemVisible(href: string, roles: readonly string[]): boolea
   const route = NAV_ROUTES.find((r) => r.href === href);
   if (!route) return false;
   return route.roles.some((r) => roles.includes(r));
+}
+
+/**
+ * ¿Puede **operar** órdenes (cambiar estatus, cancelar/reembolsar, cotizar y
+ * generar guías, corregir tallas…)? Es lo que, en la API, abre `BACKOFFICE_ROLES`;
+ * `SUPPORT` queda fuera. Con `false`, el detalle de una orden esconde todos
+ * esos botones y no pide a la API lo que ese rol no puede ver. Solo para no
+ * ofrecer de más: la autoridad real es el 403 de la API.
+ */
+export function canOperateOrders(roles: readonly string[]): boolean {
+  return BACKOFFICE_ROLES.some((role) => roles.includes(role));
 }
