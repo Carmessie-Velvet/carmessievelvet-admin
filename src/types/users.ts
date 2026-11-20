@@ -4,7 +4,7 @@
  * viviendo en `types/auth.ts`). Ver "User administration" en
  * `../carmessievelvet-api/src/modules/auth/CLAUDE.md`.
  */
-export type UserRole = "USER" | "ADMIN" | "SUPER_ADMIN" | "MARKETING" | "SALES";
+export type UserRole = "USER" | "ADMIN" | "SUPER_ADMIN" | "MARKETING" | "SALES" | "SUPPORT";
 
 export const USER_ROLE_LABEL: Record<UserRole, string> = {
   USER: "Cliente",
@@ -12,6 +12,7 @@ export const USER_ROLE_LABEL: Record<UserRole, string> = {
   SUPER_ADMIN: "Super admin",
   MARKETING: "Marketing",
   SALES: "Ventas",
+  SUPPORT: "Atención al cliente",
 };
 
 /**
@@ -21,15 +22,24 @@ export const USER_ROLE_LABEL: Record<UserRole, string> = {
  * directo si algún día hace falta) y `USER` es el rol base con el que ya
  * nace cualquier cuenta, no algo que se "otorgue".
  */
-export const GRANTABLE_ROLES: UserRole[] = ["ADMIN", "MARKETING", "SALES"];
+export const GRANTABLE_ROLES: UserRole[] = ["ADMIN", "MARKETING", "SALES", "SUPPORT"];
 
 /**
- * Roles que pueden entrar al panel de administración — más que solo
- * ADMIN/SUPER_ADMIN desde que existen Marketing/Ventas (cada uno con
- * acceso a su propio subconjunto de pantallas, ver `AppSidebar.tsx`).
+ * Roles de back-office: los que, en la API, pueden **operar** órdenes (cambiar
+ * estatus, cancelar/reembolsar, generar guías…) además de ver el catálogo, etc.
  * Mismo nombre/criterio que `BACKOFFICE_ROLES` en `carmessievelvet-api`.
+ * **No incluye `SUPPORT`** (atención al cliente) a propósito: ese rol solo ve
+ * órdenes, deja notas, reenvía el correo y descarga la guía — ver `PANEL_ROLES`.
  */
 export const BACKOFFICE_ROLES: UserRole[] = ["ADMIN", "SUPER_ADMIN", "MARKETING", "SALES"];
+
+/**
+ * Todo rol con acceso a este panel: los de back-office más `SUPPORT`, que
+ * entra pero solo ve «Órdenes» (y solo en lectura + notas/reenvío/guía — ver
+ * `canOperateOrders` en `lib/nav-access.ts`). Es lo que decide si el login
+ * acepta a la cuenta.
+ */
+export const PANEL_ROLES: readonly string[] = [...BACKOFFICE_ROLES, "SUPPORT"];
 
 export interface ApiUser {
   id: string;

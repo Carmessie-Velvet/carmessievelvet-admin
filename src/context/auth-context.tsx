@@ -9,12 +9,10 @@ import {
 import { authStore } from "@/lib/auth-store";
 import { authService } from "@/services/auth-service";
 import type { AuthUser } from "@/types/auth";
+// Todo rol con acceso a este panel (back-office + atención al cliente), cada
+// uno viendo su propio subconjunto de pantallas — ver `lib/nav-access.ts`.
+import { PANEL_ROLES } from "@/types/users";
 
-// Todo rol con acceso a este panel — ya no es solo ADMIN/SUPER_ADMIN desde
-// que existen MARKETING/SALES, cada uno viendo su propio subconjunto de
-// pantallas (ver `AppSidebar.tsx`). Mismo criterio/nombre que
-// `BACKOFFICE_ROLES` en `carmessievelvet-api` y en `types/users.ts`.
-const PANEL_ROLES = ["ADMIN", "SUPER_ADMIN", "MARKETING", "SALES"];
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
